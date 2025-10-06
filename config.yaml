@@ -1,0 +1,70 @@
+# Deities Configuration Example
+
+# How often to check for image updates (default: 5m)
+check_interval: 5m
+
+# Path to kubeconfig file (leave empty to use in-cluster config)
+kubeconfig: ""
+
+# Docker repositories to monitor
+repositories:
+  - name: nginx-app
+    registry: "https://registry-1.docker.io"  # Docker Hub (can be omitted for Docker Hub)
+    image: "nginx"
+    tag: "latest"
+    # Optional authentication for private registries
+    # auth:
+    #   username: "myuser"
+    #   password: "mypassword"
+
+  - name: myapp
+    registry: "https://registry-1.docker.io"
+    image: "myorg/myapp"
+    tag: "stable"
+    auth:
+      username: "${DOCKER_USERNAME}"
+      password: "${DOCKER_PASSWORD}"
+
+  # Example for private registry (e.g., Google Container Registry, AWS ECR, etc.)
+  # - name: private-app
+  #   registry: "https://gcr.io"
+  #   image: "myproject/myapp"
+  #   tag: "production"
+  #   auth:
+  #     username: "_json_key"
+  #     password: "${GCR_JSON_KEY}"
+
+# Kubernetes deployments to manage
+deployments:
+  - name: nginx-deployment
+    namespace: default
+    container: nginx
+    image: "nginx"  # Should match the image prefix from repositories
+
+  - name: myapp-deployment
+    namespace: production
+    container: app
+    image: "myorg/myapp"
+
+# Important: All deployments must have imagePullPolicy: Always
+# Example deployment manifest:
+#
+# apiVersion: apps/v1
+# kind: Deployment
+# metadata:
+#   name: nginx-deployment
+#   namespace: default
+# spec:
+#   replicas: 3
+#   selector:
+#     matchLabels:
+#       app: nginx
+#   template:
+#     metadata:
+#       labels:
+#         app: nginx
+#     spec:
+#       containers:
+#       - name: nginx
+#         image: nginx:latest
+#         imagePullPolicy: Always  # REQUIRED
