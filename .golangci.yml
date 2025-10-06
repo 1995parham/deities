@@ -1,95 +1,15 @@
-run:
-  timeout: 5m
-  tests: true
-  modules-download-mode: readonly
-
+---
+version: "2"
 linters:
-  enable:
-    - errcheck      # Check for unchecked errors
-    - gosimple      # Simplify code
-    - govet         # Reports suspicious constructs
-    - ineffassign   # Detect ineffectual assignments
-    - staticcheck   # Go static analysis
-    - unused        # Check for unused constants, variables, functions and types
-    - gofmt         # Check whether code was gofmt-ed
-    - goimports     # Check import statements are formatted
-    - misspell      # Finds commonly misspelled English words
-    - revive        # Fast, configurable, extensible, flexible, and beautiful linter for Go
-    - gosec         # Security-focused linter
-    - bodyclose     # Check whether HTTP response body is closed
-    - unconvert     # Remove unnecessary type conversions
-    - unparam       # Report unused function parameters
-    - goconst       # Find repeated strings that could be replaced by a constant
-    - gocritic      # Provides diagnostics that check for bugs, performance and style issues
-    - gocyclo       # Computes and checks the cyclomatic complexity of functions
-    - errorlint     # Find code that will cause problems with error wrapping
-
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-
-  govet:
-    enable-all: true
-
-  gofmt:
-    simplify: true
-
-  goimports:
-    local-prefixes: github.com/1995parham/deities
-
-  revive:
-    severity: warning
-    rules:
-      - name: blank-imports
-      - name: context-as-argument
-      - name: dot-imports
-      - name: error-return
-      - name: error-strings
-      - name: error-naming
-      - name: exported
-      - name: if-return
-      - name: increment-decrement
-      - name: var-naming
-      - name: var-declaration
-      - name: package-comments
-      - name: range
-      - name: receiver-naming
-      - name: time-naming
-      - name: unexported-return
-      - name: indent-error-flow
-      - name: errorf
-      - name: empty-block
-      - name: superfluous-else
-      - name: unused-parameter
-      - name: unreachable-code
-      - name: redefines-builtin-id
-
-  gosec:
-    excludes:
-      - G204 # Audit use of command execution - we're not using it
-
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-      - experimental
-      - opinionated
-
-  gocyclo:
-    min-complexity: 15
-
-issues:
-  exclude-use-default: false
-  exclude-rules:
-    # Exclude some linters from running on tests files
-    - path: _test\.go
-      linters:
-        - gocyclo
-        - gosec
-        - dupl
-        - goconst
-
-  max-issues-per-linter: 0
-  max-same-issues: 0
+  default: all
+  disable:
+    - depguard
+    # we don't use json with camel-case
+    - tagliatelle
+    - nolintlint
+    # it should improve to support more known patterns
+    - varnamelen
+    - ireturn
+    - revive
+    - wrapcheck
+    - noinlineerr

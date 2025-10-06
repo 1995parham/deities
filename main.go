@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"log"
 	"os"
@@ -37,7 +38,6 @@ func main() {
 
 	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// Handle shutdown gracefully
 	sigChan := make(chan os.Signal, 1)
@@ -50,8 +50,14 @@ func main() {
 	}()
 
 	// Start controller
-	if err := ctrl.Start(ctx); err != nil && err != context.Canceled {
-		log.Fatalf("Controller error: %v", err)
+	err = ctrl.Start(ctx)
+
+	// Ensure cleanup happens
+	cancel()
+
+	if err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf("Controller error: %v", err)
+		os.Exit(1)
 	}
 
 	log.Println("Deities stopped gracefully")

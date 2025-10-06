@@ -8,30 +8,34 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Config represents the application configuration
+const (
+	defaultCheckIntervalMinutes = 5
+)
+
+// Config represents the application configuration.
 type Config struct {
-	CheckInterval time.Duration    `yaml:"check_interval"`
-	Repositories  []Repository     `yaml:"repositories"`
-	Deployments   []Deployment     `yaml:"deployments"`
-	Kubeconfig    string           `yaml:"kubeconfig"`
+	CheckInterval time.Duration `yaml:"check_interval"`
+	Repositories  []Repository  `yaml:"repositories"`
+	Deployments   []Deployment  `yaml:"deployments"`
+	Kubeconfig    string        `yaml:"kubeconfig"`
 }
 
-// Repository represents a Docker registry repository to monitor
+// Repository represents a Docker registry repository to monitor.
 type Repository struct {
-	Name       string            `yaml:"name"`
-	Registry   string            `yaml:"registry"`
-	Image      string            `yaml:"image"`
-	Tag        string            `yaml:"tag"`
-	Auth       *RegistryAuth     `yaml:"auth,omitempty"`
+	Name     string        `yaml:"name"`
+	Registry string        `yaml:"registry"`
+	Image    string        `yaml:"image"`
+	Tag      string        `yaml:"tag"`
+	Auth     *RegistryAuth `yaml:"auth,omitempty"`
 }
 
-// RegistryAuth contains authentication details for private registries
+// RegistryAuth contains authentication details for private registries.
 type RegistryAuth struct {
 	Username string `yaml:"username"`
 	Password string `yaml:"password"`
 }
 
-// Deployment represents a Kubernetes deployment to manage
+// Deployment represents a Kubernetes deployment to manage.
 type Deployment struct {
 	Name      string `yaml:"name"`
 	Namespace string `yaml:"namespace"`
@@ -39,9 +43,9 @@ type Deployment struct {
 	Image     string `yaml:"image"`
 }
 
-// Load reads and parses the configuration file
+// Load reads and parses the configuration file.
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
@@ -53,7 +57,7 @@ func Load(path string) (*Config, error) {
 
 	// Set default check interval if not specified
 	if cfg.CheckInterval == 0 {
-		cfg.CheckInterval = 5 * time.Minute
+		cfg.CheckInterval = defaultCheckIntervalMinutes * time.Minute
 	}
 
 	return &cfg, nil

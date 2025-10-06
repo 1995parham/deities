@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,24 +12,33 @@ import (
 	"github.com/1995parham/deities/internal/config"
 )
 
-// Client handles Docker registry operations
+const (
+	dockerHubRegistry = "https://registry-1.docker.io"
+)
+
+var (
+	ErrRegistryRequestFailed = errors.New("registry request failed")
+	ErrAuthRequestFailed     = errors.New("auth request failed")
+)
+
+// Client handles Docker registry operations.
 type Client struct {
 	httpClient *http.Client
 }
 
-// NewClient creates a new registry client
+// NewClient creates a new registry client.
 func NewClient() *Client {
 	return &Client{
-		httpClient: &http.Client{},
+		httpClient: &http.Client{}, //nolint:exhaustruct
 	}
 }
 
-// ManifestResponse represents the registry manifest response
+// ManifestResponse represents the registry manifest response.
 type ManifestResponse struct {
-	SchemaVersion int                    `json:"schemaVersion"`
-	MediaType     string                 `json:"mediaType"`
-	Config        ManifestConfig         `json:"config"`
-	Layers        []ManifestLayer        `json:"layers"`
+	SchemaVersion int             `json:"schemaVersion"`
+	MediaType     string          `json:"mediaType"`
+	Config        ManifestConfig  `json:"config"`
+	Layers        []ManifestLayer `json:"layers"`
 }
 
 type ManifestConfig struct {
@@ -43,35 +53,51 @@ type ManifestLayer struct {
 	Digest    string `json:"digest"`
 }
 
-// GetImageDigest retrieves the digest of an image from the registry
+// GetImageDigest retrieves the digest of an image from the registry.
 func (c *Client) GetImageDigest(ctx context.Context, repo *config.Repository) (string, error) {
-	registry := repo.Registry
-	if registry == "" {
-		registry = "https://registry-1.docker.io"
-	}
+	registry := c.normalizeRegistry(repo.Registry)
+	imagePath := c.normalizeImagePath(registry, repo.Image)
 
-	// For Docker Hub, we need to use the v2 API
-	imagePath := repo.Image
-	if registry == "https://registry-1.docker.io" && !strings.Contains(imagePath, "/") {
-		imagePath = "library/" + imagePath
-	}
-
-	// Get authentication token if needed
 	token, err := c.getAuthToken(ctx, registry, imagePath, repo.Auth)
 	if err != nil {
 		return "", fmt.Errorf("failed to get auth token: %w", err)
 	}
 
-	// Construct manifest URL
-	manifestURL := fmt.Sprintf("%s/v2/%s/manifests/%s", registry, imagePath, repo.Tag)
+	digest, err := c.fetchManifestDigest(ctx, registry, imagePath, repo.Tag, token)
+	if err != nil {
+		return "", err
+	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", manifestURL, nil)
+	return digest, nil
+}
+
+func (c *Client) normalizeRegistry(registry string) string {
+	if registry == "" {
+		return dockerHubRegistry
+	}
+
+	return registry
+}
+
+func (c *Client) normalizeImagePath(registry, image string) string {
+	// For Docker Hub, we need to use the v2 API
+	if registry == dockerHubRegistry && !strings.Contains(image, "/") {
+		return "library/" + image
+	}
+
+	return image
+}
+
+func (c *Client) fetchManifestDigest(ctx context.Context, registry, imagePath, tag, token string) (string, error) {
+	manifestURL := fmt.Sprintf("%s/v2/%s/manifests/%s", registry, imagePath, tag)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Set headers
 	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json")
+
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -80,13 +106,19 @@ func (c *Client) GetImageDigest(ctx context.Context, repo *config.Repository) (s
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch manifest: %w", err)
 	}
-	defer resp.Body.Close()
+
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("registry returned status %d: %s", resp.StatusCode, string(body))
+
+		return "", fmt.Errorf("%w: status %d: %s", ErrRegistryRequestFailed, resp.StatusCode, string(body))
 	}
 
+	return c.extractDigest(resp)
+}
+
+func (c *Client) extractDigest(resp *http.Response) (string, error) {
 	// Get digest from Docker-Content-Digest header
 	digest := resp.Header.Get("Docker-Content-Digest")
 	if digest != "" {
@@ -102,42 +134,47 @@ func (c *Client) GetImageDigest(ctx context.Context, repo *config.Repository) (s
 	return manifest.Config.Digest, nil
 }
 
-// getAuthToken retrieves an authentication token for the registry
+// getAuthToken retrieves an authentication token for the registry.
 func (c *Client) getAuthToken(ctx context.Context, registry, image string, auth *config.RegistryAuth) (string, error) {
-	// For Docker Hub
-	if registry == "https://registry-1.docker.io" {
-		authURL := fmt.Sprintf("https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull", image)
-
-		req, err := http.NewRequestWithContext(ctx, "GET", authURL, nil)
-		if err != nil {
-			return "", err
-		}
-
-		if auth != nil && auth.Username != "" {
-			req.SetBasicAuth(auth.Username, auth.Password)
-		}
-
-		resp, err := c.httpClient.Do(req)
-		if err != nil {
-			return "", err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("auth request failed with status %d", resp.StatusCode)
-		}
-
-		var tokenResp struct {
-			Token string `json:"token"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-			return "", err
-		}
-
-		return tokenResp.Token, nil
+	if registry != dockerHubRegistry {
+		// For other registries, basic auth might be sufficient
+		// This is a simplified implementation
+		return "", nil
 	}
 
-	// For other registries, basic auth might be sufficient
-	// This is a simplified implementation
-	return "", nil
+	return c.getDockerHubToken(ctx, image, auth)
+}
+
+func (c *Client) getDockerHubToken(ctx context.Context, image string, auth *config.RegistryAuth) (string, error) {
+	authURL := fmt.Sprintf("https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull", image)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, authURL, nil)
+	if err != nil {
+		return "", err
+	}
+
+	if auth != nil && auth.Username != "" {
+		req.SetBasicAuth(auth.Username, auth.Password)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("%w: status %d", ErrAuthRequestFailed, resp.StatusCode)
+	}
+
+	var tokenResp struct {
+		Token string `json:"token"`
+	}
+
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", err
+	}
+
+	return tokenResp.Token, nil
 }
