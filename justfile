@@ -15,7 +15,7 @@ build:
 
 # Run the application
 run: build
-    ./{{BINARY}} -config config.yaml
+    ./{{BINARY}} -config config.toml
 
 # Clean build artifacts
 clean:

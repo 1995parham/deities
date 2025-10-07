@@ -36,41 +36,43 @@ go mod download
 
 ## Configuration
 
-Create a `config.yaml` file with your repositories and deployments:
+Create a `config.toml` file with your repositories and deployments:
 
-```yaml
+```toml
 # How often to check for image updates
-check_interval: 5m
+check_interval = "5m"
 
 # Path to kubeconfig (empty for in-cluster config)
-kubeconfig: ""
+kubeconfig = ""
 
 # Repositories to monitor
-repositories:
-  - name: nginx-app
-    registry: "https://registry-1.docker.io"
-    image: "nginx"
-    tag: "latest"
+[[repositories]]
+name = "nginx-app"
+registry = "https://registry-1.docker.io"
+image = "nginx"
+tag = "latest"
 
-  - name: myapp
-    registry: "https://registry-1.docker.io"
-    image: "myorg/myapp"
-    tag: "stable"
-    auth:
-      username: "myuser"
-      password: "mypassword"
+[[repositories]]
+name = "myapp"
+registry = "https://registry-1.docker.io"
+image = "myorg/myapp"
+tag = "stable"
+[repositories.auth]
+username = "myuser"
+password = "mypassword"
 
 # Deployments to manage
-deployments:
-  - name: nginx-deployment
-    namespace: default
-    container: nginx
-    image: "nginx"
+[[deployments]]
+name = "nginx-deployment"
+namespace = "default"
+container = "nginx"
+image = "nginx"
 
-  - name: myapp-deployment
-    namespace: production
-    container: app
-    image: "myorg/myapp"
+[[deployments]]
+name = "myapp-deployment"
+namespace = "production"
+container = "app"
+image = "myorg/myapp"
 ```
 
 ### Configuration Options
@@ -99,7 +101,7 @@ deployments:
 ### Run locally
 
 ```bash
-./deities -config config.yaml
+./deities -config config.toml
 ```
 
 ### Run in Kubernetes
@@ -141,19 +143,21 @@ metadata:
   name: deities-config
   namespace: default
 data:
-  config.yaml: |
-    check_interval: 5m
-    kubeconfig: ""
-    repositories:
-      - name: nginx
-        registry: "https://registry-1.docker.io"
-        image: "nginx"
-        tag: "latest"
-    deployments:
-      - name: nginx-deployment
-        namespace: default
-        container: nginx
-        image: "nginx"
+  config.toml: |
+    check_interval = "5m"
+    kubeconfig = ""
+
+    [[repositories]]
+    name = "nginx"
+    registry = "https://registry-1.docker.io"
+    image = "nginx"
+    tag = "latest"
+
+    [[deployments]]
+    name = "nginx-deployment"
+    namespace = "default"
+    container = "nginx"
+    image = "nginx"
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -177,7 +181,7 @@ spec:
         imagePullPolicy: Always
         args:
         - "-config"
-        - "/etc/deities/config.yaml"
+        - "/etc/deities/config.toml"
         volumeMounts:
         - name: config
           mountPath: /etc/deities
@@ -255,7 +259,7 @@ deities/
 │   └── client.go        # Kubernetes client
 ├── controller/
 │   └── controller.go    # Main controller logic
-├── config.yaml          # Example configuration
+├── config.toml          # Example configuration
 └── README.md
 ```
 
@@ -277,7 +281,7 @@ This project uses [just](https://github.com/casey/just) for task automation. Ava
 
 ```bash
 just build          # Build the application
-just run            # Build and run with config.yaml
+just run            # Build and run with config.toml
 just test           # Run tests
 just deps           # Install dependencies
 just docker-build   # Build Docker image

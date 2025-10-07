@@ -2,10 +2,11 @@ package config
 
 import (
 	"fmt"
-	"os"
 	"time"
 
-	"gopkg.in/yaml.v3"
+	"github.com/knadh/koanf/parsers/toml/v2"
+	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/v2"
 )
 
 const (
@@ -14,44 +15,47 @@ const (
 
 // Config represents the application configuration.
 type Config struct {
-	CheckInterval time.Duration `yaml:"check_interval"`
-	Repositories  []Repository  `yaml:"repositories"`
-	Deployments   []Deployment  `yaml:"deployments"`
-	Kubeconfig    string        `yaml:"kubeconfig"`
+	CheckInterval time.Duration `koanf:"check_interval"`
+	Repositories  []Repository  `koanf:"repositories"`
+	Deployments   []Deployment  `koanf:"deployments"`
+	Kubeconfig    string        `koanf:"kubeconfig"`
 }
 
 // Repository represents a Docker registry repository to monitor.
 type Repository struct {
-	Name     string        `yaml:"name"`
-	Registry string        `yaml:"registry"`
-	Image    string        `yaml:"image"`
-	Tag      string        `yaml:"tag"`
-	Auth     *RegistryAuth `yaml:"auth,omitempty"`
+	Name     string        `koanf:"name"`
+	Registry string        `koanf:"registry"`
+	Image    string        `koanf:"image"`
+	Tag      string        `koanf:"tag"`
+	Auth     *RegistryAuth `koanf:"auth,omitempty"`
 }
 
 // RegistryAuth contains authentication details for private registries.
 type RegistryAuth struct {
-	Username string `yaml:"username"`
-	Password string `yaml:"password"`
+	Username string `koanf:"username"`
+	Password string `koanf:"password"`
 }
 
 // Deployment represents a Kubernetes deployment to manage.
 type Deployment struct {
-	Name      string `yaml:"name"`
-	Namespace string `yaml:"namespace"`
-	Container string `yaml:"container"`
-	Image     string `yaml:"image"`
+	Name      string `koanf:"name"`
+	Namespace string `koanf:"namespace"`
+	Container string `koanf:"container"`
+	Image     string `koanf:"image"`
 }
 
 // Load reads and parses the configuration file.
 func Load(path string) (*Config, error) {
-	data, err := os.ReadFile(path) //nolint:gosec
-	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+	// Create a new koanf instance
+	k := koanf.New(".")
+
+	// Load the config file
+	if err := k.Load(file.Provider(path), toml.Parser()); err != nil {
+		return nil, fmt.Errorf("failed to load config file: %w", err)
 	}
 
 	var cfg Config
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+	if err := k.Unmarshal("", &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
