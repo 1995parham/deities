@@ -172,7 +172,7 @@ The chart is fully customizable via `values.yaml`. Key configuration options:
 ```yaml
 rbac:
   create: true
-  clusterWide: true  # Set to false for namespace-only access
+  clusterWide: true # Set to false for namespace-only access
 ```
 
 - `clusterWide: true` - Creates ClusterRole/ClusterRoleBinding (manages deployments across all namespaces)
@@ -186,7 +186,7 @@ config:
     level: info
 
   k8s:
-    kubeconfig: ""  # Empty for in-cluster config
+    kubeconfig: "" # Empty for in-cluster config
 
   controller:
     check_interval: "5m"
@@ -231,7 +231,9 @@ See `charts/deities/values.yaml` for all available configuration options.
 
 ### ImagePullPolicy Requirement
 
-All deployments managed by Deities **must** have `imagePullPolicy: Always`. This ensures that when the deployment is updated with a new digest, Kubernetes will pull the latest image from the registry.
+All deployments managed by Deities **must** have `imagePullPolicy: Always`.
+This ensures that when the deployment is updated with a new digest, Kubernetes will pull
+the latest image from the registry.
 
 ```yaml
 spec:
@@ -241,7 +243,7 @@ spec:
       imagePullPolicy: Always # REQUIRED
 ```
 
-Without `imagePullPolicy: Always`, the deployment will fail to update, and Deities will return an error.
+Without `imagePullPolicy: Always`, the deployment will fail to update, and Deities will stick in a loop.
 
 ### Digest-based Updates
 
@@ -314,42 +316,3 @@ Each module follows the **dependency injection pattern** using Uber's fx framewo
 - Each module provides a `Provide()` function for fx dependency injection
 - Configuration is modular - each module defines its own `Config` struct
 - All modules are wired together in `main.go` using fx
-
-### Building
-
-Using just (recommended):
-
-```bash
-just build
-```
-
-Or directly with Go:
-
-```bash
-go build -o deities .
-```
-
-### Available Commands
-
-This project uses [just](https://github.com/casey/just) for task automation. Available commands:
-
-```bash
-just build          # Build the application
-just run            # Build and run with config.toml
-just test           # Run tests
-just deps           # Install dependencies
-just docker-build   # Build Docker image
-just docker-push    # Build and push Docker image
-just clean          # Clean build artifacts
-just fmt            # Format code
-just lint           # Run linter
-just build-all      # Build for multiple platforms
-```
-
-### Testing
-
-```bash
-just test
-# or
-go test ./...
-```
