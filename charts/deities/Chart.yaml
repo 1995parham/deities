@@ -3,7 +3,7 @@ name: deities
 description: A Helm chart for Deities - Kubernetes Image Update Controller
 type: application
 version: 0.0.0
-appVersion: "0.0.0"
+appVersion: "latest"
 keywords:
   - kubernetes
   - controller
