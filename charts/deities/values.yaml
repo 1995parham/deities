@@ -5,7 +5,7 @@ replicaCount: 1
 
 # Container image configuration
 image:
-  repository: deities
+  repository: ghcr.io/1995parham/deities
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion
   tag: ""
