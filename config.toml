@@ -4,27 +4,18 @@
 check_interval = "5m"
 
 # Path to kubeconfig file (leave empty to use in-cluster config)
-kubeconfig = ""
+kubeconfig = "/home/parham/.kube/config"
 
 # Docker repositories to monitor
 [[repositories]]
 name = "nginx-app"
-registry = "https://registry-1.docker.io"  # Docker Hub (can be omitted for Docker Hub)
+registry = "https://registry-1.docker.io" # Docker Hub (can be omitted for Docker Hub)
 image = "nginx"
 tag = "latest"
 # Optional authentication for private registries
 # [repositories.auth]
 # username = "myuser"
 # password = "mypassword"
-
-[[repositories]]
-name = "myapp"
-registry = "https://registry-1.docker.io"
-image = "myorg/myapp"
-tag = "stable"
-[repositories.auth]
-username = "${DOCKER_USERNAME}"
-password = "${DOCKER_PASSWORD}"
 
 # Example for private registry (e.g., Google Container Registry, AWS ECR, etc.)
 # [[repositories]]
@@ -41,7 +32,7 @@ password = "${DOCKER_PASSWORD}"
 name = "nginx-deployment"
 namespace = "default"
 container = "nginx"
-image = "nginx"  # Should match the image prefix from repositories
+image = "nginx"           # Should match the image prefix from repositories
 
 [[deployments]]
 name = "myapp-deployment"

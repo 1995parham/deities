@@ -30,14 +30,7 @@ func NewClient(kubeconfig string) (*Client, error) {
 		err    error
 	)
 
-	if kubeconfig != "" {
-		// Use kubeconfig file
-		config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-	} else {
-		// Use in-cluster config
-		config, err = rest.InClusterConfig()
-	}
-
+	config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes config: %w", err)
 	}

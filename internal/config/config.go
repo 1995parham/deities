@@ -6,11 +6,8 @@ import (
 
 	"github.com/knadh/koanf/parsers/toml/v2"
 	"github.com/knadh/koanf/providers/file"
+	"github.com/knadh/koanf/providers/structs"
 	"github.com/knadh/koanf/v2"
-)
-
-const (
-	defaultCheckIntervalMinutes = 5
 )
 
 // Config represents the application configuration.
@@ -46,22 +43,20 @@ type Deployment struct {
 
 // Load reads and parses the configuration file.
 func Load(path string) (*Config, error) {
-	// Create a new koanf instance
 	k := koanf.New(".")
 
-	// Load the config file
+	if err := k.Load(structs.Provider(Default(), "koanf"), nil); err != nil {
+		return nil, fmt.Errorf("error loading default: %w", err)
+	}
+
 	if err := k.Load(file.Provider(path), toml.Parser()); err != nil {
 		return nil, fmt.Errorf("failed to load config file: %w", err)
 	}
 
 	var cfg Config
+
 	if err := k.Unmarshal("", &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
-	}
-
-	// Set default check interval if not specified
-	if cfg.CheckInterval == 0 {
-		cfg.CheckInterval = defaultCheckIntervalMinutes * time.Minute
 	}
 
 	return &cfg, nil

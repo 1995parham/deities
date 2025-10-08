@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -18,25 +19,28 @@ func main() {
 	configPath := flag.String("config", "config.toml", "Path to configuration file")
 	flag.Parse()
 
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
 	// Load configuration
 	cfg, err := config.Load(*configPath)
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		logger.Error("Failed to load configuration", slog.String("error", err.Error()))
+
+		os.Exit(1)
 	}
 
-	log.Printf("Loaded configuration with %d repositories and %d deployments",
-		len(cfg.Repositories), len(cfg.Deployments))
+	logger.Info("Loaded configuration",
+		slog.Int("repositories", len(cfg.Repositories)),
+		slog.Int("deployments", len(cfg.Deployments)),
+	)
 
-	// Create Kubernetes client
 	k8sClient, err := k8s.NewClient(cfg.Kubeconfig)
 	if err != nil {
 		log.Fatalf("Failed to create Kubernetes client: %v", err)
 	}
 
-	// Create controller
 	ctrl := controller.NewController(cfg, k8sClient)
 
-	// Setup context with cancellation
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Handle shutdown gracefully
