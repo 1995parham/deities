@@ -3,7 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -20,22 +20,24 @@ type Controller struct {
 	k8sClient      *k8s.Client
 	imageDigests   map[string]string // tracks current digests for each repository
 	mu             sync.RWMutex
+	logger         *slog.Logger
 }
 
 // NewController creates a new controller instance.
-func NewController(cfg *config.Config, k8sClient *k8s.Client) *Controller {
+func NewController(cfg *config.Config, k8sClient *k8s.Client, logger *slog.Logger) *Controller {
 	return &Controller{
 		config:         cfg,
-		registryClient: registry.NewClient(),
+		registryClient: registry.NewClient(logger),
 		k8sClient:      k8sClient,
 		imageDigests:   make(map[string]string),
 		mu:             sync.RWMutex{},
+		logger:         logger,
 	}
 }
 
 // Start begins the monitoring loop.
 func (c *Controller) Start(ctx context.Context) error {
-	log.Println("Starting Deities controller...")
+	c.logger.Info("Starting Deities controller...")
 
 	// Initial check to populate digests
 	c.checkAndUpdate(ctx)
@@ -46,7 +48,7 @@ func (c *Controller) Start(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("Controller stopping...")
+			c.logger.Info("Controller stopping...")
 
 			return ctx.Err()
 		case <-ticker.C:
@@ -57,11 +59,14 @@ func (c *Controller) Start(ctx context.Context) error {
 
 // checkAndUpdate checks all repositories for updates and triggers deployments.
 func (c *Controller) checkAndUpdate(ctx context.Context) {
-	log.Println("Checking for image updates...")
+	c.logger.Info("Checking for image updates...")
 
 	for _, repo := range c.config.Repositories {
 		if err := c.checkRepository(ctx, &repo); err != nil {
-			log.Printf("Error checking repository %s: %v", repo.Name, err)
+			c.logger.Error("Error checking repository",
+				slog.String("repository", repo.Name),
+				slog.String("error", err.Error()),
+			)
 
 			continue
 		}
@@ -84,7 +89,10 @@ func (c *Controller) checkRepository(ctx context.Context, repo *config.Repositor
 
 	if !exists {
 		// First time seeing this repository
-		log.Printf("Initial digest for %s: %s", repoKey, newDigest)
+		c.logger.Info("Initial digest for repository",
+			slog.String("repository", repoKey),
+			slog.String("digest", newDigest),
+		)
 		c.mu.Lock()
 		c.imageDigests[repoKey] = newDigest
 		c.mu.Unlock()
@@ -96,7 +104,11 @@ func (c *Controller) checkRepository(ctx context.Context, repo *config.Repositor
 	}
 
 	if oldDigest != newDigest {
-		log.Printf("Digest changed for %s: %s -> %s", repoKey, oldDigest, newDigest)
+		c.logger.Info("Digest changed for repository",
+			slog.String("repository", repoKey),
+			slog.String("old_digest", oldDigest),
+			slog.String("new_digest", newDigest),
+		)
 
 		// Update stored digest
 		c.mu.Lock()
@@ -106,7 +118,10 @@ func (c *Controller) checkRepository(ctx context.Context, repo *config.Repositor
 		// Find and update matching deployments
 		c.updateMatchingDeployments(ctx, repo, newDigest)
 	} else {
-		log.Printf("No change for %s (digest: %s)", repoKey, newDigest)
+		c.logger.Info("No change for repository",
+			slog.String("repository", repoKey),
+			slog.String("digest", newDigest),
+		)
 	}
 
 	return nil
@@ -139,20 +154,31 @@ func (c *Controller) checkDeploymentsOnStartup(ctx context.Context, repo *config
 			deployment.Container,
 		)
 		if err != nil {
-			log.Printf("Failed to get current image for deployment %s/%s: %v",
-				deployment.Namespace, deployment.Name, err)
+			c.logger.Error("Failed to get current image for deployment",
+				slog.String("namespace", deployment.Namespace),
+				slog.String("deployment", deployment.Name),
+				slog.String("error", err.Error()),
+			)
 
 			continue
 		}
 
-		log.Printf("Deployment %s/%s current image: %s", deployment.Namespace, deployment.Name, currentImage)
+		c.logger.Info("Deployment current image",
+			slog.String("namespace", deployment.Namespace),
+			slog.String("deployment", deployment.Name),
+			slog.String("image", currentImage),
+		)
 
 		// Check if the current image matches the registry digest
 		expectedImageRef := fmt.Sprintf("%s@%s", imagePrefix, registryDigest)
 
 		if currentImage != expectedImageRef {
-			log.Printf("Deployment %s/%s image mismatch. Current: %s, Expected: %s",
-				deployment.Namespace, deployment.Name, currentImage, expectedImageRef)
+			c.logger.Info("Deployment image mismatch",
+				slog.String("namespace", deployment.Namespace),
+				slog.String("deployment", deployment.Name),
+				slog.String("current", currentImage),
+				slog.String("expected", expectedImageRef),
+			)
 
 			// Update the deployment to match the registry
 			err := c.k8sClient.UpdateDeploymentImage(
@@ -163,16 +189,25 @@ func (c *Controller) checkDeploymentsOnStartup(ctx context.Context, repo *config
 				expectedImageRef,
 			)
 			if err != nil {
-				log.Printf("Failed to update deployment %s/%s on startup: %v",
-					deployment.Namespace, deployment.Name, err)
+				c.logger.Error("Failed to update deployment on startup",
+					slog.String("namespace", deployment.Namespace),
+					slog.String("deployment", deployment.Name),
+					slog.String("error", err.Error()),
+				)
 
 				continue
 			}
 
-			log.Printf("Updated deployment %s/%s to match registry digest: %s",
-				deployment.Namespace, deployment.Name, expectedImageRef)
+			c.logger.Info("Updated deployment to match registry digest",
+				slog.String("namespace", deployment.Namespace),
+				slog.String("deployment", deployment.Name),
+				slog.String("image", expectedImageRef),
+			)
 		} else {
-			log.Printf("Deployment %s/%s already matches registry digest", deployment.Namespace, deployment.Name)
+			c.logger.Info("Deployment already matches registry digest",
+				slog.String("namespace", deployment.Namespace),
+				slog.String("deployment", deployment.Name),
+			)
 		}
 	}
 }
@@ -196,7 +231,10 @@ func (c *Controller) updateMatchingDeployments(ctx context.Context, repo *config
 			continue
 		}
 
-		log.Printf("Updating deployment %s/%s...", deployment.Namespace, deployment.Name)
+		c.logger.Info("Updating deployment",
+			slog.String("namespace", deployment.Namespace),
+			slog.String("deployment", deployment.Name),
+		)
 
 		// Construct the new image reference with digest
 		newImageRef := fmt.Sprintf("%s@%s", imagePrefix, newDigest)
@@ -210,12 +248,19 @@ func (c *Controller) updateMatchingDeployments(ctx context.Context, repo *config
 			newImageRef,
 		)
 		if err != nil {
-			log.Printf("Failed to update deployment %s/%s: %v", deployment.Namespace, deployment.Name, err)
+			c.logger.Error("Failed to update deployment",
+				slog.String("namespace", deployment.Namespace),
+				slog.String("deployment", deployment.Name),
+				slog.String("error", err.Error()),
+			)
 
 			continue
 		}
 
-		log.Printf("Successfully updated deployment %s/%s with image %s",
-			deployment.Namespace, deployment.Name, newImageRef)
+		c.logger.Info("Successfully updated deployment",
+			slog.String("namespace", deployment.Namespace),
+			slog.String("deployment", deployment.Name),
+			slog.String("image", newImageRef),
+		)
 	}
 }

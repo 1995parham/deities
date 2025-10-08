@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -24,12 +25,14 @@ var (
 // Client handles Docker registry operations.
 type Client struct {
 	httpClient *http.Client
+	logger     *slog.Logger
 }
 
 // NewClient creates a new registry client.
-func NewClient() *Client {
+func NewClient(logger *slog.Logger) *Client {
 	return &Client{
 		httpClient: &http.Client{}, //nolint:exhaustruct
+		logger:     logger,
 	}
 }
 

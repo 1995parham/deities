@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"log"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -34,12 +33,14 @@ func main() {
 		slog.Int("deployments", len(cfg.Deployments)),
 	)
 
-	k8sClient, err := k8s.NewClient(cfg.Kubeconfig)
+	k8sClient, err := k8s.NewClient(cfg.Kubeconfig, logger)
 	if err != nil {
-		log.Fatalf("Failed to create Kubernetes client: %v", err)
+		logger.Error("Failed to create Kubernetes client", slog.String("error", err.Error()))
+
+		os.Exit(1)
 	}
 
-	ctrl := controller.NewController(cfg, k8sClient)
+	ctrl := controller.NewController(cfg, k8sClient, logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -49,7 +50,7 @@ func main() {
 
 	go func() {
 		<-sigChan
-		log.Println("Received shutdown signal")
+		logger.Info("Received shutdown signal")
 		cancel()
 	}()
 
@@ -60,9 +61,9 @@ func main() {
 	cancel()
 
 	if err != nil && !errors.Is(err, context.Canceled) {
-		log.Printf("Controller error: %v", err)
+		logger.Error("Controller error", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
 
-	log.Println("Deities stopped gracefully")
+	logger.Info("Deities stopped gracefully")
 }

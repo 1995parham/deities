@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -21,10 +22,11 @@ var (
 // Client handles Kubernetes operations.
 type Client struct {
 	clientset *kubernetes.Clientset
+	logger    *slog.Logger
 }
 
 // NewClient creates a new Kubernetes client.
-func NewClient(kubeconfig string) (*Client, error) {
+func NewClient(kubeconfig string, logger *slog.Logger) (*Client, error) {
 	kubeconfig = os.ExpandEnv(kubeconfig)
 
 	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
@@ -39,6 +41,7 @@ func NewClient(kubeconfig string) (*Client, error) {
 
 	return &Client{
 		clientset: clientset,
+		logger:    logger,
 	}, nil
 }
 
