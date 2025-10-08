@@ -9,7 +9,10 @@ Deities is a Go application that monitors Docker registries for image updates an
 - 🐳 **Multi-registry support** - Works with Docker Hub, GCR, ECR, and other Docker registries
 - 🔐 **Authentication support** - Supports private registries with username/password authentication
 - ⏱️ **Configurable intervals** - Set custom check intervals for monitoring
-- 📊 **Comprehensive logging** - Detailed logs for monitoring and debugging
+- 📊 **Colorful logging** - Beautiful, structured logging with pterm integration
+- 🎨 **Pretty output** - Colorful ASCII logo and well-formatted logs
+- 🏗️ **Clean architecture** - Built with Uber's fx dependency injection framework
+- 🔧 **Environment variables** - Override configuration via environment variables
 
 ## Requirements
 
@@ -39,36 +42,42 @@ go mod download
 Create a `config.toml` file with your repositories and deployments:
 
 ```toml
-# How often to check for image updates
-check_interval = "5m"
+# Logger configuration
+[logger]
+level = "info"  # Options: debug, info, warn, error
 
-# Path to kubeconfig (empty for in-cluster config)
-kubeconfig = ""
+# Kubernetes configuration
+[k8s]
+kubeconfig = "$HOME/.kube/config"  # Path to kubeconfig (empty for in-cluster config)
+
+# Controller configuration
+[controller]
+check_interval = "5m"  # How often to check for image updates
 
 # Repositories to monitor
-[[repositories]]
+[[controller.repositories]]
 name = "nginx-app"
 registry = "https://registry-1.docker.io"
 image = "nginx"
 tag = "latest"
 
-[[repositories]]
+[[controller.repositories]]
 name = "myapp"
 registry = "https://registry-1.docker.io"
 image = "myorg/myapp"
 tag = "stable"
-[repositories.auth]
+[controller.repositories.auth]
 username = "myuser"
 password = "mypassword"
 
 # Deployments to manage
-[[deployments]]
+[[controller.deployments]]
 name = "nginx-deployment"
 namespace = "default"
 container = "nginx"
 image = "nginx"
 
-[[deployments]]
+[[controller.deployments]]
 name = "myapp-deployment"
 namespace = "production"
 container = "app"
@@ -77,11 +86,16 @@ image = "myorg/myapp"
 
 ### Configuration Options
 
-#### Global Settings
-- `check_interval`: How often to check for updates (e.g., "5m", "1h", "30s")
+#### Logger Settings (`[logger]`)
+- `level`: Log level (options: "debug", "info", "warn", "error")
+
+#### Kubernetes Settings (`[k8s]`)
 - `kubeconfig`: Path to kubeconfig file (leave empty for in-cluster config)
 
-#### Repositories
+#### Controller Settings (`[controller]`)
+- `check_interval`: How often to check for updates (e.g., "5m", "1h", "30s")
+
+#### Repositories (`[[controller.repositories]]`)
 - `name`: Friendly name for the repository
 - `registry`: Registry URL (use "https://registry-1.docker.io" for Docker Hub)
 - `image`: Image name (for Docker Hub, omit "library/" prefix for official images)
@@ -90,11 +104,24 @@ image = "myorg/myapp"
   - `username`: Registry username
   - `password`: Registry password
 
-#### Deployments
+#### Deployments (`[[controller.deployments]]`)
 - `name`: Deployment name in Kubernetes
 - `namespace`: Kubernetes namespace
 - `container`: Container name within the deployment
 - `image`: Image prefix to match against repositories
+
+### Environment Variables
+
+Configuration can also be set via environment variables with the `deities_` prefix. Use double underscores (`__`) to represent nested fields:
+
+```bash
+# Examples:
+export deities_logger__level=debug
+export deities_k8s__kubeconfig=/path/to/kubeconfig
+export deities_controller__check_interval=10m
+```
+
+Environment variables override values from `config.toml`.
 
 ## Usage
 
@@ -144,16 +171,22 @@ metadata:
   namespace: default
 data:
   config.toml: |
-    check_interval = "5m"
+    [logger]
+    level = "info"
+
+    [k8s]
     kubeconfig = ""
 
-    [[repositories]]
+    [controller]
+    check_interval = "5m"
+
+    [[controller.repositories]]
     name = "nginx"
     registry = "https://registry-1.docker.io"
     image = "nginx"
     tag = "latest"
 
-    [[deployments]]
+    [[controller.deployments]]
     name = "nginx-deployment"
     namespace = "default"
     container = "nginx"
@@ -250,18 +283,29 @@ If you see Kubernetes permission errors:
 
 ```
 deities/
-├── main.go              # Application entry point
-├── config/
-│   └── config.go        # Configuration parsing
-├── registry/
-│   └── client.go        # Docker registry client
-├── k8s/
-│   └── client.go        # Kubernetes client
-├── controller/
-│   └── controller.go    # Main controller logic
-├── config.toml          # Example configuration
+├── main.go                      # Application entry point with fx setup
+├── internal/
+│   ├── config/
+│   │   ├── config.go            # Centralized configuration with fx.Out
+│   │   └── default.go           # Default configuration values
+│   ├── logger/
+│   │   └── logger.go            # Logger module with pterm integration
+│   ├── logo/
+│   │   └── logo.go              # ASCII logo with pterm
+│   ├── registry/
+│   │   └── client.go            # Docker registry client
+│   ├── k8s/
+│   │   └── client.go            # Kubernetes client
+│   └── controller/
+│       └── controller.go        # Main controller logic
+├── config.toml                  # Example configuration
 └── README.md
 ```
+
+Each module follows the **dependency injection pattern** using Uber's fx framework:
+- Each module provides a `Provide()` function for fx dependency injection
+- Configuration is modular - each module defines its own `Config` struct
+- All modules are wired together in `main.go` using fx
 
 ### Building
 
