@@ -157,98 +157,75 @@ Environment variables override values from `config.toml`.
 
 ### Run in Kubernetes
 
-Create a deployment for Deities:
+Deploy Deities using the provided Helm chart:
+
+```bash
+helm install deities ./charts/deities -n deities-system --create-namespace
+```
+
+#### Helm Chart Configuration
+
+The chart is fully customizable via `values.yaml`. Key configuration options:
+
+**RBAC Configuration** - Choose between cluster-wide or namespace-scoped permissions:
 
 ```yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: deities
-  namespace: default
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: deities
-rules:
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "list", "update", "patch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: deities
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: deities
-subjects:
-  - kind: ServiceAccount
-    name: deities
-    namespace: default
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: deities-config
-  namespace: default
-data:
-  config.toml: |
-    [logger]
-    level = "info"
-
-    [k8s]
-    kubeconfig = ""
-
-    [controller]
-    check_interval = "5m"
-
-    [[controller.registries]]
-    name = "https://registry-1.docker.io"
-
-    [[controller.images]]
-    name = "nginx"
-    registry = "https://registry-1.docker.io"
-    tag = "latest"
-
-    [[controller.deployments]]
-    name = "nginx-deployment"
-    namespace = "default"
-    container = "nginx"
-    image = "nginx"
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: deities
-  namespace: default
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: deities
-  template:
-    metadata:
-      labels:
-        app: deities
-    spec:
-      serviceAccountName: deities
-      containers:
-        - name: deities
-          image: deities:latest
-          imagePullPolicy: Always
-          args:
-            - "-config"
-            - "/etc/deities/config.toml"
-          volumeMounts:
-            - name: config
-              mountPath: /etc/deities
-      volumes:
-        - name: config
-          configMap:
-            name: deities-config
+rbac:
+  create: true
+  clusterWide: true  # Set to false for namespace-only access
 ```
+
+- `clusterWide: true` - Creates ClusterRole/ClusterRoleBinding (manages deployments across all namespaces)
+- `clusterWide: false` - Creates Role/RoleBinding (manages deployments only in release namespace)
+
+**Application Configuration** - The `config` section is automatically converted to TOML:
+
+```yaml
+config:
+  logger:
+    level: info
+
+  k8s:
+    kubeconfig: ""  # Empty for in-cluster config
+
+  controller:
+    check_interval: "5m"
+
+    registries:
+      - name: "https://registry-1.docker.io"
+      - name: "https://gcr.io"
+        auth:
+          username: "_json_key"
+          password: "YOUR_GCR_JSON_KEY"
+
+    images:
+      - name: "nginx"
+        registry: "https://registry-1.docker.io"
+        tag: "latest"
+
+    deployments:
+      - name: "nginx-deployment"
+        namespace: "default"
+        container: "nginx"
+        image: "nginx"
+```
+
+**Using Secrets for Credentials:**
+
+```bash
+kubectl create secret generic registry-creds --from-literal=gcr-key='YOUR_JSON_KEY'
+```
+
+```yaml
+extraEnv:
+  - name: deities_controller__registries__1__auth__password
+    valueFrom:
+      secretKeyRef:
+        name: registry-creds
+        key: gcr-key
+```
+
+See `charts/deities/values.yaml` for all available configuration options.
 
 ## Important Notes
 
