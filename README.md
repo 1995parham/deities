@@ -3,6 +3,11 @@
 <h6>Kubernetes Image Update Controller</h6>
 <img src="./.github/assets/banner.jpg" alt="banner" height="500px" />
 </div>
+<div align="center">
+  <img alt="GitHub Actions Workflow Status" src="https://img.shields.io/github/actions/workflow/status/1995parham/deities/ci.yml?style=for-the-badge&logo=github">
+  <img alt="GitHub Tag" src="https://img.shields.io/github/v/tag/1995parham/deities?sort=semver&style=for-the-badge&logo=github">
+  <img alt="GitHub go.mod Go version" src="https://img.shields.io/github/go-mod/go-version/1995parham/deities?style=for-the-badge&logo=go">
+</div>
 
 ## Introduction
 
