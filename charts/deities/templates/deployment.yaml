@@ -38,7 +38,8 @@ spec:
           {{- end }}
           volumeMounts:
             - name: config
-              mountPath: /root
+              mountPath: "/root/config.toml"
+              subPath: "config.toml"
               readOnly: true
             {{- with .Values.extraVolumeMounts }}
             {{- toYaml . | nindent 12 }}
