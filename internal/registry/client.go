@@ -88,7 +88,11 @@ func (c *Client) normalizeImagePath(registry, image string) string {
 	return image
 }
 
-func (c *Client) fetchManifestDigest(ctx context.Context, registry, imagePath, tag, token string, auth *config.RegistryAuth) (string, error) {
+func (c *Client) fetchManifestDigest(
+	ctx context.Context,
+	registry, imagePath, tag, token string,
+	auth *config.RegistryAuth,
+) (string, error) {
 	manifestURL := fmt.Sprintf("%s/v2/%s/manifests/%s", registry, imagePath, tag)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL, nil)
