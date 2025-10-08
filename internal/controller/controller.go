@@ -128,6 +128,7 @@ func (c *Controller) checkRepository(ctx context.Context, repo *config.Repositor
 }
 
 // checkDeploymentsOnStartup checks and updates deployments on initial startup to match registry.
+// nolint: funlen
 func (c *Controller) checkDeploymentsOnStartup(ctx context.Context, repo *config.Repository, registryDigest string) {
 	const dockerHubRegistry = "https://registry-1.docker.io"
 
