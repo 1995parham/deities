@@ -63,7 +63,7 @@ func (c *Client) GetImageDigest(ctx context.Context, repo *config.Repository) (s
 		return "", fmt.Errorf("failed to get auth token: %w", err)
 	}
 
-	digest, err := c.fetchManifestDigest(ctx, registry, imagePath, repo.Tag, token)
+	digest, err := c.fetchManifestDigest(ctx, registry, imagePath, repo.Tag, token, repo.Auth)
 	if err != nil {
 		return "", err
 	}
@@ -88,7 +88,7 @@ func (c *Client) normalizeImagePath(registry, image string) string {
 	return image
 }
 
-func (c *Client) fetchManifestDigest(ctx context.Context, registry, imagePath, tag, token string) (string, error) {
+func (c *Client) fetchManifestDigest(ctx context.Context, registry, imagePath, tag, token string, auth *config.RegistryAuth) (string, error) {
 	manifestURL := fmt.Sprintf("%s/v2/%s/manifests/%s", registry, imagePath, tag)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL, nil)
@@ -98,8 +98,12 @@ func (c *Client) fetchManifestDigest(ctx context.Context, registry, imagePath, t
 
 	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json")
 
+	// Use bearer token if available (Docker Hub and OAuth2-based registries)
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
+	} else if auth != nil && auth.Username != "" {
+		// Fall back to basic auth for registries that support it
+		req.SetBasicAuth(auth.Username, auth.Password)
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -135,10 +139,11 @@ func (c *Client) extractDigest(resp *http.Response) (string, error) {
 }
 
 // getAuthToken retrieves an authentication token for the registry.
+// Returns a bearer token for Docker Hub (OAuth2), empty string for other registries (will use basic auth).
 func (c *Client) getAuthToken(ctx context.Context, registry, image string, auth *config.RegistryAuth) (string, error) {
 	if registry != dockerHubRegistry {
-		// For other registries, basic auth might be sufficient
-		// This is a simplified implementation
+		// For non-Docker Hub registries, return empty token to use basic auth
+		// Basic auth will be applied in fetchManifestDigest if credentials are provided
 		return "", nil
 	}
 
