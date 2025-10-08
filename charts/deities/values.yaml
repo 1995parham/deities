@@ -75,7 +75,8 @@ affinity: {}
 config:
   # Logger configuration
   logger:
-    level: info # Options: debug, info, warn, error
+    # Options: debug, info, warn, error
+    level: info
 
   # Kubernetes configuration
   k8s:
