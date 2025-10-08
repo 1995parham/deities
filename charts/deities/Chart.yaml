@@ -1,0 +1,18 @@
+apiVersion: v2
+name: deities
+description: A Helm chart for Deities - Kubernetes Image Update Controller
+type: application
+version: 0.0.0
+appVersion: "0.0.0"
+keywords:
+  - kubernetes
+  - controller
+  - image
+  - registry
+  - automation
+home: https://github.com/1995parham/deities
+sources:
+  - https://github.com/1995parham/deities
+maintainers:
+  - name: Parham Alvani
+    email: parham.alvani@gmail.com

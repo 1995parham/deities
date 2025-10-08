@@ -1,0 +1,157 @@
+# Default values for deities Helm chart
+
+# Number of replicas for the deities deployment
+replicaCount: 1
+
+# Container image configuration
+image:
+  repository: deities
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion
+  tag: ""
+
+# Image pull secrets for private registries
+imagePullSecrets: []
+
+# Override the default name
+nameOverride: ""
+fullnameOverride: ""
+
+# ServiceAccount configuration
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+# RBAC configuration
+rbac:
+  # Specifies whether RBAC resources should be created
+  create: true
+  # Use ClusterRole and ClusterRoleBinding (true) or Role and RoleBinding (false)
+  # When using ClusterRole, deities can manage deployments across all namespaces
+  # When using Role, deities can only manage deployments in the release namespace
+  clusterWide: true
+
+# Pod annotations
+podAnnotations: {}
+
+# Pod security context
+podSecurityContext: {}
+  # fsGroup: 2000
+
+# Container security context
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+# Resource limits and requests
+resources: {}
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity rules
+affinity: {}
+
+# Application configuration
+# This configuration will be converted to TOML and mounted as config.toml
+config:
+  # Logger configuration
+  logger:
+    level: info # Options: debug, info, warn, error
+
+  # Kubernetes configuration
+  k8s:
+    # Path to kubeconfig (empty for in-cluster config)
+    kubeconfig: ""
+
+  # Controller configuration
+  controller:
+    # How often to check for image updates (e.g., "5m", "1h", "30s")
+    check_interval: "5m"
+
+    # Registries configuration (define registry addresses and authentication)
+    # Example:
+    # registries:
+    #   - name: "https://registry-1.docker.io"  # Docker Hub
+    #   - name: "https://gcr.io"
+    #     auth:
+    #       username: "_json_key"
+    #       password: "YOUR_GCR_JSON_KEY"
+    #   - name: "https://my-registry.example.com"
+    #     auth:
+    #       username: "myuser"
+    #       password: "mypassword"
+    registries:
+      - name: "https://registry-1.docker.io"
+
+    # Images to monitor (each image references a registry)
+    # Example:
+    # images:
+    #   - name: "nginx"
+    #     registry: "https://registry-1.docker.io"
+    #     tag: "latest"
+    #   - name: "nginx"
+    #     registry: "https://registry-1.docker.io"
+    #     tag: "stable"
+    #   - name: "myorg/myapp"
+    #     registry: "https://registry-1.docker.io"
+    #     tag: "main"
+    images: []
+
+    # Deployments to manage
+    # Example:
+    # deployments:
+    #   - name: "nginx-deployment"
+    #     namespace: "default"
+    #     container: "nginx"
+    #     image: "nginx"
+    #   - name: "myapp-deployment"
+    #     namespace: "production"
+    #     container: "app"
+    #     image: "myorg/myapp"
+    deployments: []
+
+# Additional environment variables to pass to the deities container
+# These can be used to override configuration values via environment variables
+# Environment variables should use the format: deities_section__key
+# Example:
+# extraEnv:
+#   - name: deities_logger__level
+#     value: "debug"
+#   - name: deities_controller__check_interval
+#     value: "10m"
+#   - name: GCR_JSON_KEY
+#     valueFrom:
+#       secretKeyRef:
+#         name: gcr-credentials
+#         key: json-key
+extraEnv: []
+
+# Additional volumes to mount
+extraVolumes: []
+# - name: custom-config
+#   configMap:
+#     name: my-custom-config
+
+# Additional volume mounts
+extraVolumeMounts: []
+# - name: custom-config
+#   mountPath: /etc/custom

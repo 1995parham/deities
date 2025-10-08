@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "deities.fullname" . }}-config
+  labels:
+    {{- include "deities.labels" . | nindent 4 }}
+data:
+  config.toml: |
+    {{- .Values.config | toToml | nindent 4 }}
