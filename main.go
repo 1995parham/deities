@@ -47,11 +47,11 @@ func run(
 			OnStart: func(ctx context.Context) error {
 				logger.Info("Starting Deities application")
 
-				go func() {
+				go func(ctx context.Context) {
 					if err := ctrl.Start(ctx); err != nil {
 						logger.Error("Controller error", slog.String("error", err.Error()))
 					}
-				}()
+				}(context.WithoutCancel(ctx))
 
 				return nil
 			},
