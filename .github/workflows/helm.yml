@@ -53,4 +53,4 @@ jobs:
       - name: publish deities chart to github container registry
         run: |
           version=${{ github.ref_name }}
-          helm push "soteria-${version##v}".tgz oci://ghcr.io/1995parham/deities-chart
+          helm push "deities-${version##v}".tgz oci://ghcr.io/1995parham/deities-chart
