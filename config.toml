@@ -4,7 +4,7 @@
 check_interval = "5m"
 
 # Path to kubeconfig file (leave empty to use in-cluster config)
-kubeconfig = "/home/parham/.kube/config"
+kubeconfig = "$HOME/.kube/config"
 
 # Docker repositories to monitor
 [[repositories]]

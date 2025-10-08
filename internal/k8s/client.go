@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -25,12 +25,9 @@ type Client struct {
 
 // NewClient creates a new Kubernetes client.
 func NewClient(kubeconfig string) (*Client, error) {
-	var (
-		config *rest.Config
-		err    error
-	)
+	kubeconfig = os.ExpandEnv(kubeconfig)
 
-	config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubernetes config: %w", err)
 	}
