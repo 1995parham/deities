@@ -3,6 +3,8 @@ package config
 import (
 	"time"
 
+	"go.uber.org/fx"
+
 	"github.com/1995parham/deities/internal/controller"
 	"github.com/1995parham/deities/internal/k8s"
 	"github.com/1995parham/deities/internal/logger"
@@ -16,6 +18,7 @@ const (
 // Default return default configuration.
 func Default() Config {
 	return Config{
+		Out: fx.Out{},
 		Controller: controller.Config{
 			CheckInterval: defaultCheckIntervalMinutes * time.Minute,
 			Repositories:  []registry.Repository{},
