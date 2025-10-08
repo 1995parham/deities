@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 )
 
@@ -59,6 +60,8 @@ type ManifestLayer struct {
 func (c *Client) GetImageDigest(ctx context.Context, img *Image, reg *Registry) (string, error) {
 	registryAddr := c.normalizeRegistry(reg.Name)
 	imagePath := c.normalizeImagePath(registryAddr, img.Name)
+
+	reg.Auth.Password = os.ExpandEnv(reg.Auth.Password)
 
 	token, err := c.getAuthToken(ctx, registryAddr, imagePath, reg.Auth)
 	if err != nil {
