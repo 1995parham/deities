@@ -37,11 +37,6 @@ func run(
 	cfg controller.Config,
 	logger *slog.Logger,
 ) {
-	logger.Info("Loaded configuration",
-		slog.Int("repositories", len(cfg.Repositories)),
-		slog.Int("deployments", len(cfg.Deployments)),
-	)
-
 	lc.Append(
 		fx.Hook{
 			OnStart: func(ctx context.Context) error {

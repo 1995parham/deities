@@ -21,7 +21,8 @@ func Default() Config {
 		Out: fx.Out{},
 		Controller: controller.Config{
 			CheckInterval: defaultCheckIntervalMinutes * time.Minute,
-			Repositories:  []registry.Repository{},
+			Registries:    []registry.Registry{},
+			Images:        []registry.Image{},
 			Deployments:   []controller.Deployment{},
 		},
 		K8s: k8s.Config{

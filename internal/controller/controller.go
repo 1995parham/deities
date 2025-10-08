@@ -12,6 +12,15 @@ import (
 	"github.com/1995parham/deities/internal/registry"
 )
 
+type RegistryNotFoundError struct {
+	image    string
+	registry string
+}
+
+func (err RegistryNotFoundError) Error() string {
+	return fmt.Sprintf("registry configuration not found for image %s (registry: %s)", err.image, err.registry)
+}
+
 // Deployment represents a Kubernetes deployment to manage.
 type Deployment struct {
 	Name      string `json:"name"      koanf:"name"`
@@ -25,7 +34,8 @@ type Controller struct {
 	config         Config
 	registryClient *registry.Client
 	k8sClient      *k8s.Client
-	imageDigests   map[string]string // tracks current digests for each repository
+	imageDigests   map[string]string             // tracks current digests for each image
+	registryMap    map[string]*registry.Registry // maps registry name to registry config
 	mu             sync.RWMutex
 	logger         *slog.Logger
 }
@@ -37,11 +47,18 @@ func NewController(
 	k8sClient *k8s.Client,
 	logger *slog.Logger,
 ) *Controller {
+	// Build registry map for quick lookup
+	registryMap := make(map[string]*registry.Registry)
+	for i := range cfg.Registries {
+		registryMap[cfg.Registries[i].Name] = &cfg.Registries[i]
+	}
+
 	return &Controller{
 		config:         cfg,
 		registryClient: registryClient,
 		k8sClient:      k8sClient,
 		imageDigests:   make(map[string]string),
+		registryMap:    registryMap,
 		mu:             sync.RWMutex{},
 		logger:         logger,
 	}
@@ -74,14 +91,15 @@ func (c *Controller) Start(ctx context.Context) error {
 	}
 }
 
-// checkAndUpdate checks all repositories for updates and triggers deployments.
+// checkAndUpdate checks all images for updates and triggers deployments.
 func (c *Controller) checkAndUpdate(ctx context.Context) {
 	c.logger.Info("Checking for image updates...")
 
-	for _, repo := range c.config.Repositories {
-		if err := c.checkRepository(ctx, &repo); err != nil {
-			c.logger.Error("Error checking repository",
-				slog.String("repository", repo.Name),
+	for _, img := range c.config.Images {
+		if err := c.checkImage(ctx, &img); err != nil {
+			c.logger.Error("Error checking image",
+				slog.String("image", img.Name),
+				slog.String("tag", img.Tag),
 				slog.String("error", err.Error()),
 			)
 
@@ -90,53 +108,59 @@ func (c *Controller) checkAndUpdate(ctx context.Context) {
 	}
 }
 
-// checkRepository checks a single repository for updates.
-func (c *Controller) checkRepository(ctx context.Context, repo *registry.Repository) error {
-	repoKey := fmt.Sprintf("%s/%s:%s", repo.Registry, repo.Image, repo.Tag)
+// checkImage checks a single image for updates.
+func (c *Controller) checkImage(ctx context.Context, img *registry.Image) error {
+	// Resolve registry configuration
+	reg, exists := c.registryMap[img.Registry]
+	if !exists {
+		return RegistryNotFoundError{img.Name, img.Registry}
+	}
+
+	imageKey := img.Key()
 
 	// Get current digest from registry
-	newDigest, err := c.registryClient.GetImageDigest(ctx, repo)
+	newDigest, err := c.registryClient.GetImageDigest(ctx, img, reg)
 	if err != nil {
-		return fmt.Errorf("failed to get digest for %s: %w", repoKey, err)
+		return fmt.Errorf("failed to get digest for %s: %w", imageKey, err)
 	}
 
 	c.mu.Lock()
-	oldDigest, exists := c.imageDigests[repoKey]
+	oldDigest, exists := c.imageDigests[imageKey]
 	c.mu.Unlock()
 
 	if !exists {
-		// First time seeing this repository
-		c.logger.Info("Initial digest for repository",
-			slog.String("repository", repoKey),
+		// First time seeing this image
+		c.logger.Info("Initial digest for image",
+			slog.String("image", imageKey),
 			slog.String("digest", newDigest),
 		)
 		c.mu.Lock()
-		c.imageDigests[repoKey] = newDigest
+		c.imageDigests[imageKey] = newDigest
 		c.mu.Unlock()
 
 		// Check if deployments need to be updated to match the registry
-		c.checkDeploymentsOnStartup(ctx, repo, newDigest)
+		c.checkDeploymentsOnStartup(ctx, img, reg, newDigest)
 
 		return nil
 	}
 
 	if oldDigest != newDigest {
-		c.logger.Info("Digest changed for repository",
-			slog.String("repository", repoKey),
+		c.logger.Info("Digest changed for image",
+			slog.String("image", imageKey),
 			slog.String("old_digest", oldDigest),
 			slog.String("new_digest", newDigest),
 		)
 
 		// Update stored digest
 		c.mu.Lock()
-		c.imageDigests[repoKey] = newDigest
+		c.imageDigests[imageKey] = newDigest
 		c.mu.Unlock()
 
 		// Find and update matching deployments
-		c.updateMatchingDeployments(ctx, repo, newDigest)
+		c.updateMatchingDeployments(ctx, img, reg, newDigest)
 	} else {
-		c.logger.Info("No change for repository",
-			slog.String("repository", repoKey),
+		c.logger.Info("No change for image",
+			slog.String("image", imageKey),
 			slog.String("digest", newDigest),
 		)
 	}
@@ -146,16 +170,21 @@ func (c *Controller) checkRepository(ctx context.Context, repo *registry.Reposit
 
 // checkDeploymentsOnStartup checks and updates deployments on initial startup to match registry.
 // nolint: funlen
-func (c *Controller) checkDeploymentsOnStartup(ctx context.Context, repo *registry.Repository, registryDigest string) {
+func (c *Controller) checkDeploymentsOnStartup(
+	ctx context.Context,
+	img *registry.Image,
+	reg *registry.Registry,
+	registryDigest string,
+) {
 	const dockerHubRegistry = "https://registry-1.docker.io"
 
-	imagePrefix := repo.Image
+	imagePrefix := img.Name
 
-	if repo.Registry != "" && repo.Registry != dockerHubRegistry {
+	if reg.Name != "" && reg.Name != dockerHubRegistry {
 		// For non-Docker Hub registries, include registry in comparison
-		registryHost := strings.TrimPrefix(repo.Registry, "https://")
+		registryHost := strings.TrimPrefix(reg.Name, "https://")
 		registryHost = strings.TrimPrefix(registryHost, "http://")
-		imagePrefix = registryHost + "/" + repo.Image
+		imagePrefix = registryHost + "/" + img.Name
 	}
 
 	for _, deployment := range c.config.Deployments {
@@ -230,17 +259,22 @@ func (c *Controller) checkDeploymentsOnStartup(ctx context.Context, repo *regist
 	}
 }
 
-// updateMatchingDeployments updates all deployments that use the given repository.
-func (c *Controller) updateMatchingDeployments(ctx context.Context, repo *registry.Repository, newDigest string) {
+// updateMatchingDeployments updates all deployments that use the given image.
+func (c *Controller) updateMatchingDeployments(
+	ctx context.Context,
+	img *registry.Image,
+	reg *registry.Registry,
+	newDigest string,
+) {
 	const dockerHubRegistry = "https://registry-1.docker.io"
 
-	imagePrefix := repo.Image
+	imagePrefix := img.Name
 
-	if repo.Registry != "" && repo.Registry != dockerHubRegistry {
+	if reg.Name != "" && reg.Name != dockerHubRegistry {
 		// For non-Docker Hub registries, include registry in comparison
-		registryHost := strings.TrimPrefix(repo.Registry, "https://")
+		registryHost := strings.TrimPrefix(reg.Name, "https://")
 		registryHost = strings.TrimPrefix(registryHost, "http://")
-		imagePrefix = registryHost + "/" + repo.Image
+		imagePrefix = registryHost + "/" + img.Name
 	}
 
 	for _, deployment := range c.config.Deployments {

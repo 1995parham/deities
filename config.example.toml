@@ -8,43 +8,49 @@
 
 # Logger configuration
 [logger]
-level = "info"  # Options: debug, info, warn, error
+level = "info" # Options: debug, info, warn, error
 
 # Kubernetes configuration
 [k8s]
-kubeconfig = "$HOME/.kube/config"  # Path to kubeconfig file (leave empty to use in-cluster config)
+kubeconfig = "$HOME/.kube/config" # Path to kubeconfig file (leave empty to use in-cluster config)
 
 # Controller configuration
 [controller]
-check_interval = "5m"  # How often to check for image updates (default: 5m)
+check_interval = "5m" # How often to check for image updates (default: 5m)
 
-# Docker repositories to monitor
-[[controller.repositories]]
-name = "nginx-app"
-registry = "https://registry-1.docker.io"  # Docker Hub (can be omitted for Docker Hub)
-image = "nginx"
-tag = "latest"
+# Registries configuration (define registry addresses and authentication)
+[[controller.registries]]
+name = "https://registry-1.docker.io" # Docker Hub
 # Optional authentication for private registries
-# [controller.repositories.auth]
+# [controller.registries.auth]
 # username = "myuser"
 # password = "mypassword"
 
 # Example for private registry (e.g., Google Container Registry, AWS ECR, etc.)
-# [[controller.repositories]]
-# name = "private-app"
-# registry = "https://gcr.io"
-# image = "myproject/myapp"
-# tag = "production"
-# [controller.repositories.auth]
+# [[controller.registries]]
+# name = "https://gcr.io"
+# [controller.registries.auth]
 # username = "_json_key"
 # password = "${GCR_JSON_KEY}"
+
+# Images to monitor (each image references a registry)
+[[controller.images]]
+name = "nginx"
+registry = "https://registry-1.docker.io"
+tag = "latest"
+
+# Example for private registry image
+# [[controller.images]]
+# name = "myproject/myapp"
+# registry = "https://gcr.io"
+# tag = "production"
 
 # Kubernetes deployments to manage
 [[controller.deployments]]
 name = "nginx-deployment"
 namespace = "default"
 container = "nginx"
-image = "nginx"  # Should match the image prefix from repositories
+image = "nginx"           # Should match the image prefix from repositories
 
 [[controller.deployments]]
 name = "myapp-deployment"

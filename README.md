@@ -60,21 +60,31 @@ kubeconfig = "$HOME/.kube/config"  # Path to kubeconfig (empty for in-cluster co
 [controller]
 check_interval = "5m"  # How often to check for image updates
 
-# Repositories to monitor
-[[controller.repositories]]
-name = "nginx-app"
+# Registries configuration (define registry addresses and authentication)
+[[controller.registries]]
+name = "https://registry-1.docker.io"  # Docker Hub
+
+[[controller.registries]]
+name = "https://gcr.io"
+[controller.registries.auth]
+username = "_json_key"
+password = "${GCR_JSON_KEY}"
+
+# Images to monitor (each image references a registry)
+[[controller.images]]
+name = "nginx"
 registry = "https://registry-1.docker.io"
-image = "nginx"
 tag = "latest"
 
-[[controller.repositories]]
-name = "myapp"
+[[controller.images]]
+name = "nginx"
 registry = "https://registry-1.docker.io"
-image = "myorg/myapp"
 tag = "stable"
-[controller.repositories.auth]
-username = "myuser"
-password = "mypassword"
+
+[[controller.images]]
+name = "myorg/myapp"
+registry = "https://registry-1.docker.io"
+tag = "stable"
 
 # Deployments to manage
 [[controller.deployments]]
@@ -93,28 +103,36 @@ image = "myorg/myapp"
 ### Configuration Options
 
 #### Logger Settings (`[logger]`)
+
 - `level`: Log level (options: "debug", "info", "warn", "error")
 
 #### Kubernetes Settings (`[k8s]`)
+
 - `kubeconfig`: Path to kubeconfig file (leave empty for in-cluster config)
 
 #### Controller Settings (`[controller]`)
+
 - `check_interval`: How often to check for updates (e.g., "5m", "1h", "30s")
 
-#### Repositories (`[[controller.repositories]]`)
-- `name`: Friendly name for the repository
-- `registry`: Registry URL (use "https://registry-1.docker.io" for Docker Hub)
-- `image`: Image name (for Docker Hub, omit "library/" prefix for official images)
-- `tag`: Image tag to monitor
+#### Registries (`[[controller.registries]]`)
+
+- `name`: Registry address (e.g., "https://registry-1.docker.io" for Docker Hub)
 - `auth`: Optional authentication credentials
   - `username`: Registry username
   - `password`: Registry password
 
+#### Images (`[[controller.images]]`)
+
+- `name`: Image name (for Docker Hub, omit "library/" prefix for official images)
+- `registry`: Reference to a registry defined in `[[controller.registries]]`
+- `tag`: Image tag to monitor (e.g., "latest", "stable")
+
 #### Deployments (`[[controller.deployments]]`)
+
 - `name`: Deployment name in Kubernetes
 - `namespace`: Kubernetes namespace
 - `container`: Container name within the deployment
-- `image`: Image prefix to match against repositories
+- `image`: Image prefix to match against images
 
 ### Environment Variables
 
@@ -153,9 +171,9 @@ kind: ClusterRole
 metadata:
   name: deities
 rules:
-- apiGroups: ["apps"]
-  resources: ["deployments"]
-  verbs: ["get", "list", "update", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -166,9 +184,9 @@ roleRef:
   kind: ClusterRole
   name: deities
 subjects:
-- kind: ServiceAccount
-  name: deities
-  namespace: default
+  - kind: ServiceAccount
+    name: deities
+    namespace: default
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -186,10 +204,12 @@ data:
     [controller]
     check_interval = "5m"
 
-    [[controller.repositories]]
+    [[controller.registries]]
+    name = "https://registry-1.docker.io"
+
+    [[controller.images]]
     name = "nginx"
     registry = "https://registry-1.docker.io"
-    image = "nginx"
     tag = "latest"
 
     [[controller.deployments]]
@@ -215,19 +235,19 @@ spec:
     spec:
       serviceAccountName: deities
       containers:
-      - name: deities
-        image: deities:latest
-        imagePullPolicy: Always
-        args:
-        - "-config"
-        - "/etc/deities/config.toml"
-        volumeMounts:
-        - name: config
-          mountPath: /etc/deities
+        - name: deities
+          image: deities:latest
+          imagePullPolicy: Always
+          args:
+            - "-config"
+            - "/etc/deities/config.toml"
+          volumeMounts:
+            - name: config
+              mountPath: /etc/deities
       volumes:
-      - name: config
-        configMap:
-          name: deities-config
+        - name: config
+          configMap:
+            name: deities-config
 ```
 
 ## Important Notes
@@ -239,9 +259,9 @@ All deployments managed by Deities **must** have `imagePullPolicy: Always`. This
 ```yaml
 spec:
   containers:
-  - name: myapp
-    image: myapp:latest
-    imagePullPolicy: Always  # REQUIRED
+    - name: myapp
+      image: myapp:latest
+      imagePullPolicy: Always # REQUIRED
 ```
 
 Without `imagePullPolicy: Always`, the deployment will fail to update, and Deities will return an error.
@@ -249,6 +269,7 @@ Without `imagePullPolicy: Always`, the deployment will fail to update, and Deiti
 ### Digest-based Updates
 
 Deities uses image digests (SHA256 hashes) rather than tags to detect updates. This means:
+
 - Even if a tag like `latest` is reused, Deities will detect the new image
 - Updates are based on actual image content changes, not tag changes
 - Deployments are updated with digest references (e.g., `nginx@sha256:abc123...`)
@@ -266,6 +287,7 @@ Deities uses image digests (SHA256 hashes) rather than tags to detect updates. T
 ### Authentication Errors
 
 If you see authentication errors:
+
 - Verify your username and password are correct
 - For Docker Hub, you may need to use an access token instead of your password
 - For private registries, ensure you're using the correct authentication method
@@ -273,6 +295,7 @@ If you see authentication errors:
 ### Deployment Not Updating
 
 If deployments aren't updating:
+
 - Check that `imagePullPolicy: Always` is set
 - Verify the image prefix in the deployment config matches the repository
 - Check logs for errors
@@ -280,6 +303,7 @@ If deployments aren't updating:
 ### Permission Errors
 
 If you see Kubernetes permission errors:
+
 - Ensure the ServiceAccount has appropriate RBAC permissions
 - Verify the ClusterRole includes `get`, `list`, `update`, and `patch` on deployments
 
@@ -309,6 +333,7 @@ deities/
 ```
 
 Each module follows the **dependency injection pattern** using Uber's fx framework:
+
 - Each module provides a `Provide()` function for fx dependency injection
 - Configuration is modular - each module defines its own `Config` struct
 - All modules are wired together in `main.go` using fx
@@ -316,11 +341,13 @@ Each module follows the **dependency injection pattern** using Uber's fx framewo
 ### Building
 
 Using just (recommended):
+
 ```bash
 just build
 ```
 
 Or directly with Go:
+
 ```bash
 go build -o deities .
 ```

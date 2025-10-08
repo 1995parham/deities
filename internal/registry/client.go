@@ -11,10 +11,6 @@ import (
 	"strings"
 )
 
-const (
-	dockerHubRegistry = "https://registry-1.docker.io"
-)
-
 var (
 	ErrRegistryRequestFailed = errors.New("registry request failed")
 	ErrAuthRequestFailed     = errors.New("auth request failed")
@@ -60,16 +56,16 @@ type ManifestLayer struct {
 }
 
 // GetImageDigest retrieves the digest of an image from the registry.
-func (c *Client) GetImageDigest(ctx context.Context, repo *Repository) (string, error) {
-	registry := c.normalizeRegistry(repo.Registry)
-	imagePath := c.normalizeImagePath(registry, repo.Image)
+func (c *Client) GetImageDigest(ctx context.Context, img *Image, reg *Registry) (string, error) {
+	registryAddr := c.normalizeRegistry(reg.Name)
+	imagePath := c.normalizeImagePath(registryAddr, img.Name)
 
-	token, err := c.getAuthToken(ctx, registry, imagePath, repo.Auth)
+	token, err := c.getAuthToken(ctx, registryAddr, imagePath, reg.Auth)
 	if err != nil {
 		return "", fmt.Errorf("failed to get auth token: %w", err)
 	}
 
-	digest, err := c.fetchManifestDigest(ctx, registry, imagePath, repo.Tag, token, repo.Auth)
+	digest, err := c.fetchManifestDigest(ctx, registryAddr, imagePath, img.Tag, token, reg.Auth)
 	if err != nil {
 		return "", err
 	}
@@ -86,7 +82,6 @@ func (c *Client) normalizeRegistry(registry string) string {
 }
 
 func (c *Client) normalizeImagePath(registry, image string) string {
-	// For Docker Hub, we need to use the v2 API
 	if registry == dockerHubRegistry && !strings.Contains(image, "/") {
 		return "library/" + image
 	}

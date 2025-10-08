@@ -8,7 +8,8 @@ import (
 
 // Config represents controller configuration.
 type Config struct {
-	CheckInterval time.Duration         `json:"check_interval" koanf:"check_interval"`
-	Repositories  []registry.Repository `json:"repositories"   koanf:"repositories"`
-	Deployments   []Deployment          `json:"deployments"    koanf:"deployments"`
+	CheckInterval time.Duration       `json:"check_interval" koanf:"check_interval"`
+	Registries    []registry.Registry `json:"registries"     koanf:"registries"`
+	Images        []registry.Image    `json:"images"         koanf:"images"`
+	Deployments   []Deployment        `json:"deployments"    koanf:"deployments"`
 }
