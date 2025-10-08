@@ -26,4 +26,3 @@ COPY --from=builder /app/deities .
 
 # Run the application
 ENTRYPOINT ["./deities"]
-CMD ["-config", "/etc/deities/config.toml"]
