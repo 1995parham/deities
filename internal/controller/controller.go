@@ -89,6 +89,9 @@ func (c *Controller) checkRepository(ctx context.Context, repo *config.Repositor
 		c.imageDigests[repoKey] = newDigest
 		c.mu.Unlock()
 
+		// Check if deployments need to be updated to match the registry
+		c.checkDeploymentsOnStartup(ctx, repo, newDigest)
+
 		return nil
 	}
 
@@ -107,6 +110,71 @@ func (c *Controller) checkRepository(ctx context.Context, repo *config.Repositor
 	}
 
 	return nil
+}
+
+// checkDeploymentsOnStartup checks and updates deployments on initial startup to match registry.
+func (c *Controller) checkDeploymentsOnStartup(ctx context.Context, repo *config.Repository, registryDigest string) {
+	const dockerHubRegistry = "https://registry-1.docker.io"
+
+	imagePrefix := repo.Image
+
+	if repo.Registry != "" && repo.Registry != dockerHubRegistry {
+		// For non-Docker Hub registries, include registry in comparison
+		registryHost := strings.TrimPrefix(repo.Registry, "https://")
+		registryHost = strings.TrimPrefix(registryHost, "http://")
+		imagePrefix = registryHost + "/" + repo.Image
+	}
+
+	for _, deployment := range c.config.Deployments {
+		// Check if this deployment uses this image
+		if !strings.HasPrefix(deployment.Image, imagePrefix) {
+			continue
+		}
+
+		// Get current image from deployment
+		currentImage, err := c.k8sClient.GetCurrentImageDigest(
+			ctx,
+			deployment.Namespace,
+			deployment.Name,
+			deployment.Container,
+		)
+		if err != nil {
+			log.Printf("Failed to get current image for deployment %s/%s: %v",
+				deployment.Namespace, deployment.Name, err)
+
+			continue
+		}
+
+		log.Printf("Deployment %s/%s current image: %s", deployment.Namespace, deployment.Name, currentImage)
+
+		// Check if the current image matches the registry digest
+		expectedImageRef := fmt.Sprintf("%s@%s", imagePrefix, registryDigest)
+
+		if currentImage != expectedImageRef {
+			log.Printf("Deployment %s/%s image mismatch. Current: %s, Expected: %s",
+				deployment.Namespace, deployment.Name, currentImage, expectedImageRef)
+
+			// Update the deployment to match the registry
+			err := c.k8sClient.UpdateDeploymentImage(
+				ctx,
+				deployment.Namespace,
+				deployment.Name,
+				deployment.Container,
+				expectedImageRef,
+			)
+			if err != nil {
+				log.Printf("Failed to update deployment %s/%s on startup: %v",
+					deployment.Namespace, deployment.Name, err)
+
+				continue
+			}
+
+			log.Printf("Updated deployment %s/%s to match registry digest: %s",
+				deployment.Namespace, deployment.Name, expectedImageRef)
+		} else {
+			log.Printf("Deployment %s/%s already matches registry digest", deployment.Namespace, deployment.Name)
+		}
+	}
 }
 
 // updateMatchingDeployments updates all deployments that use the given repository.
