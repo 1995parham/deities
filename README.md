@@ -1,4 +1,10 @@
-# Deities - Kubernetes Image Update Controller
+<div align="center">
+<h1>Deities</h1>
+<h6>Kubernetes Image Update Controller</h6>
+<img src="./.github/assets/banner.jpg" alt="banner" height="500px" />
+</div>
+
+## Introduction
 
 Deities is a Go application that monitors Docker registries for image updates and automatically triggers rollouts of Kubernetes deployments when new images are pushed. It uses image digests (not tags) to detect updates, ensuring accurate change detection even when tags are reused.
 
@@ -128,7 +134,7 @@ Environment variables override values from `config.toml`.
 ### Run locally
 
 ```bash
-./deities -config config.toml
+./deities
 ```
 
 ### Run in Kubernetes
@@ -343,11 +349,3 @@ just test
 # or
 go test ./...
 ```
-
-## License
-
-MIT
-
-## Contributing
-
-Contributions are welcome! Please open an issue or submit a pull request.
