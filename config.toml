@@ -1,40 +1,52 @@
 # Deities Configuration Example
+#
+# Configuration can be set via:
+# 1. This TOML file
+# 2. Environment variables with prefix 'deities_'
+#    Example: deities_logger__level=debug
+#    (use __ to represent nested fields: logger.level -> deities_logger__level)
 
-# How often to check for image updates (default: 5m)
-check_interval = "5m"
+# Logger configuration
+[logger]
+level = "info"  # Options: debug, info, warn, error
 
-# Path to kubeconfig file (leave empty to use in-cluster config)
-kubeconfig = "$HOME/.kube/config"
+# Kubernetes configuration
+[k8s]
+kubeconfig = "$HOME/.kube/config"  # Path to kubeconfig file (leave empty to use in-cluster config)
+
+# Controller configuration
+[controller]
+check_interval = "5m"  # How often to check for image updates (default: 5m)
 
 # Docker repositories to monitor
-[[repositories]]
+[[controller.repositories]]
 name = "nginx-app"
-registry = "https://registry-1.docker.io" # Docker Hub (can be omitted for Docker Hub)
+registry = "https://registry-1.docker.io"  # Docker Hub (can be omitted for Docker Hub)
 image = "nginx"
 tag = "latest"
 # Optional authentication for private registries
-# [repositories.auth]
+# [controller.repositories.auth]
 # username = "myuser"
 # password = "mypassword"
 
 # Example for private registry (e.g., Google Container Registry, AWS ECR, etc.)
-# [[repositories]]
+# [[controller.repositories]]
 # name = "private-app"
 # registry = "https://gcr.io"
 # image = "myproject/myapp"
 # tag = "production"
-# [repositories.auth]
+# [controller.repositories.auth]
 # username = "_json_key"
 # password = "${GCR_JSON_KEY}"
 
 # Kubernetes deployments to manage
-[[deployments]]
+[[controller.deployments]]
 name = "nginx-deployment"
 namespace = "default"
 container = "nginx"
-image = "nginx"           # Should match the image prefix from repositories
+image = "nginx"  # Should match the image prefix from repositories
 
-[[deployments]]
+[[controller.deployments]]
 name = "myapp-deployment"
 namespace = "production"
 container = "app"
