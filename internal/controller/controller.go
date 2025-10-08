@@ -138,8 +138,8 @@ func (c *Controller) checkImage(ctx context.Context, img *registry.Image) error 
 		c.imageDigests[imageKey] = newDigest
 		c.mu.Unlock()
 
-		// Check if deployments need to be updated to match the registry
-		c.checkDeploymentsOnStartup(ctx, img, reg, newDigest)
+		// Sync deployments to match registry on startup
+		c.syncDeployments(ctx, img, reg, newDigest)
 
 		return nil
 	}
@@ -156,26 +156,25 @@ func (c *Controller) checkImage(ctx context.Context, img *registry.Image) error 
 		c.imageDigests[imageKey] = newDigest
 		c.mu.Unlock()
 
-		// Find and update matching deployments
-		c.updateMatchingDeployments(ctx, img, reg, newDigest)
+		// Sync deployments to match new registry digest
+		c.syncDeployments(ctx, img, reg, newDigest)
 	} else {
 		c.logger.Info("No change for image",
 			slog.String("image", imageKey),
 			slog.String("digest", newDigest),
 		)
+
+		// Even if registry hasn't changed, verify deployments are in sync
+		c.syncDeployments(ctx, img, reg, newDigest)
 	}
 
 	return nil
 }
 
-// checkDeploymentsOnStartup checks and updates deployments on initial startup to match registry.
-// nolint: funlen
-func (c *Controller) checkDeploymentsOnStartup(
-	ctx context.Context,
-	img *registry.Image,
-	reg *registry.Registry,
-	registryDigest string,
-) {
+// buildImagePrefix constructs the image prefix for matching deployments.
+// For Docker Hub, it returns just the image name.
+// For other registries, it includes the registry host.
+func (c *Controller) buildImagePrefix(img *registry.Image, reg *registry.Registry) string {
 	const dockerHubRegistry = "https://registry-1.docker.io"
 
 	imagePrefix := img.Name
@@ -186,6 +185,23 @@ func (c *Controller) checkDeploymentsOnStartup(
 		registryHost = strings.TrimPrefix(registryHost, "http://")
 		imagePrefix = registryHost + "/" + img.Name
 	}
+
+	return imagePrefix
+}
+
+// syncDeployments ensures all deployments using this image match the registry digest.
+// This function performs bidirectional sync by:
+// 1. Checking if deployment image matches the expected registry digest
+// 2. Updating the deployment if there's a mismatch.
+// nolint: funlen
+func (c *Controller) syncDeployments(
+	ctx context.Context,
+	img *registry.Image,
+	reg *registry.Registry,
+	registryDigest string,
+) {
+	imagePrefix := c.buildImagePrefix(img, reg)
+	expectedImageRef := fmt.Sprintf("%s@%s", imagePrefix, registryDigest)
 
 	for _, deployment := range c.config.Deployments {
 		// Check if this deployment uses this image
@@ -210,17 +226,9 @@ func (c *Controller) checkDeploymentsOnStartup(
 			continue
 		}
 
-		c.logger.Info("Deployment current image",
-			slog.String("namespace", deployment.Namespace),
-			slog.String("deployment", deployment.Name),
-			slog.String("image", currentImage),
-		)
-
-		// Check if the current image matches the registry digest
-		expectedImageRef := fmt.Sprintf("%s@%s", imagePrefix, registryDigest)
-
+		// Check if deployment image matches registry digest
 		if currentImage != expectedImageRef {
-			c.logger.Info("Deployment image mismatch",
+			c.logger.Info("Syncing deployment to match registry",
 				slog.String("namespace", deployment.Namespace),
 				slog.String("deployment", deployment.Name),
 				slog.String("current", currentImage),
@@ -236,7 +244,7 @@ func (c *Controller) checkDeploymentsOnStartup(
 				expectedImageRef,
 			)
 			if err != nil {
-				c.logger.Error("Failed to update deployment on startup",
+				c.logger.Error("Failed to sync deployment",
 					slog.String("namespace", deployment.Namespace),
 					slog.String("deployment", deployment.Name),
 					slog.String("error", err.Error()),
@@ -245,74 +253,16 @@ func (c *Controller) checkDeploymentsOnStartup(
 				continue
 			}
 
-			c.logger.Info("Updated deployment to match registry digest",
+			c.logger.Info("Successfully synced deployment",
 				slog.String("namespace", deployment.Namespace),
 				slog.String("deployment", deployment.Name),
 				slog.String("image", expectedImageRef),
 			)
 		} else {
-			c.logger.Info("Deployment already matches registry digest",
+			c.logger.Debug("Deployment already in sync",
 				slog.String("namespace", deployment.Namespace),
 				slog.String("deployment", deployment.Name),
 			)
 		}
-	}
-}
-
-// updateMatchingDeployments updates all deployments that use the given image.
-func (c *Controller) updateMatchingDeployments(
-	ctx context.Context,
-	img *registry.Image,
-	reg *registry.Registry,
-	newDigest string,
-) {
-	const dockerHubRegistry = "https://registry-1.docker.io"
-
-	imagePrefix := img.Name
-
-	if reg.Name != "" && reg.Name != dockerHubRegistry {
-		// For non-Docker Hub registries, include registry in comparison
-		registryHost := strings.TrimPrefix(reg.Name, "https://")
-		registryHost = strings.TrimPrefix(registryHost, "http://")
-		imagePrefix = registryHost + "/" + img.Name
-	}
-
-	for _, deployment := range c.config.Deployments {
-		// Check if this deployment uses this image
-		if !strings.HasPrefix(deployment.Image, imagePrefix) {
-			continue
-		}
-
-		c.logger.Info("Updating deployment",
-			slog.String("namespace", deployment.Namespace),
-			slog.String("deployment", deployment.Name),
-		)
-
-		// Construct the new image reference with digest
-		newImageRef := fmt.Sprintf("%s@%s", imagePrefix, newDigest)
-
-		// Update the deployment
-		err := c.k8sClient.UpdateDeploymentImage(
-			ctx,
-			deployment.Namespace,
-			deployment.Name,
-			deployment.Container,
-			newImageRef,
-		)
-		if err != nil {
-			c.logger.Error("Failed to update deployment",
-				slog.String("namespace", deployment.Namespace),
-				slog.String("deployment", deployment.Name),
-				slog.String("error", err.Error()),
-			)
-
-			continue
-		}
-
-		c.logger.Info("Successfully updated deployment",
-			slog.String("namespace", deployment.Namespace),
-			slog.String("deployment", deployment.Name),
-			slog.String("image", newImageRef),
-		)
 	}
 }
