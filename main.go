@@ -8,12 +8,16 @@ import (
 	"github.com/1995parham/deities/internal/controller"
 	"github.com/1995parham/deities/internal/k8s"
 	"github.com/1995parham/deities/internal/logger"
+	"github.com/1995parham/deities/internal/logo"
 	"github.com/1995parham/deities/internal/registry"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 )
 
 func main() {
+	// Print colorful logo
+	logo.Print()
+
 	fx.New(
 		fx.Provide(config.Provide),
 		fx.Provide(logger.Provide),

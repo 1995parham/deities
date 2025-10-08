@@ -2,36 +2,40 @@ package logger
 
 import (
 	"log/slog"
-	"os"
+
+	"github.com/pterm/pterm"
 )
 
 type Config struct {
 	Level string `json:"level" koanf:"level"`
 }
 
-// Provide creates a slog logger.
+// Provide creates a slog logger with pterm integration.
 func Provide(cfg Config) *slog.Logger {
-	var level slog.Level
+	var ptermLevel pterm.LogLevel
 
 	switch cfg.Level {
 	case "debug":
-		level = slog.LevelDebug
+		ptermLevel = pterm.LogLevelDebug
 	case "info":
-		level = slog.LevelInfo
+		ptermLevel = pterm.LogLevelInfo
 	case "warn":
-		level = slog.LevelWarn
+		ptermLevel = pterm.LogLevelWarn
 	case "error":
-		level = slog.LevelError
+		ptermLevel = pterm.LogLevelError
 	default:
-		level = slog.LevelInfo
+		ptermLevel = pterm.LogLevelInfo
 	}
 
-	// nolint: exhaustruct
-	opts := &slog.HandlerOptions{
-		Level: level,
-	}
+	// Create a pterm logger
+	ptermLogger := pterm.DefaultLogger.
+		WithLevel(ptermLevel).
+		WithCaller(false)
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, opts))
+	// Use pterm's slog handler for colorful output
+	handler := pterm.NewSlogHandler(ptermLogger)
+
+	logger := slog.New(handler)
 
 	return logger
 }
