@@ -1,6 +1,13 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/1995parham/deities/internal/controller"
+	"github.com/1995parham/deities/internal/k8s"
+	"github.com/1995parham/deities/internal/logger"
+	"github.com/1995parham/deities/internal/registry"
+)
 
 const (
 	defaultCheckIntervalMinutes = 5
@@ -9,9 +16,16 @@ const (
 // Default return default configuration.
 func Default() Config {
 	return Config{
-		CheckInterval: defaultCheckIntervalMinutes * time.Minute,
-		Repositories:  []Repository{},
-		Deployments:   []Deployment{},
-		Kubeconfig:    "",
+		Controller: controller.Config{
+			CheckInterval: defaultCheckIntervalMinutes * time.Minute,
+			Repositories:  []registry.Repository{},
+			Deployments:   []controller.Deployment{},
+		},
+		K8s: k8s.Config{
+			Kubeconfig: "",
+		},
+		Logger: logger.Config{
+			Level: "info",
+		},
 	}
 }

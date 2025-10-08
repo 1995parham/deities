@@ -9,8 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-
-	"github.com/1995parham/deities/internal/config"
 )
 
 const (
@@ -36,6 +34,11 @@ func NewClient(logger *slog.Logger) *Client {
 	}
 }
 
+// Provide creates a new registry client using fx dependency injection.
+func Provide(logger *slog.Logger) *Client {
+	return NewClient(logger)
+}
+
 // ManifestResponse represents the registry manifest response.
 type ManifestResponse struct {
 	SchemaVersion int             `json:"schemaVersion"`
@@ -57,7 +60,7 @@ type ManifestLayer struct {
 }
 
 // GetImageDigest retrieves the digest of an image from the registry.
-func (c *Client) GetImageDigest(ctx context.Context, repo *config.Repository) (string, error) {
+func (c *Client) GetImageDigest(ctx context.Context, repo *Repository) (string, error) {
 	registry := c.normalizeRegistry(repo.Registry)
 	imagePath := c.normalizeImagePath(registry, repo.Image)
 
@@ -94,7 +97,7 @@ func (c *Client) normalizeImagePath(registry, image string) string {
 func (c *Client) fetchManifestDigest(
 	ctx context.Context,
 	registry, imagePath, tag, token string,
-	auth *config.RegistryAuth,
+	auth *RegistryAuth,
 ) (string, error) {
 	manifestURL := fmt.Sprintf("%s/v2/%s/manifests/%s", registry, imagePath, tag)
 
@@ -147,7 +150,7 @@ func (c *Client) extractDigest(resp *http.Response) (string, error) {
 
 // getAuthToken retrieves an authentication token for the registry.
 // Returns a bearer token for Docker Hub (OAuth2), empty string for other registries (will use basic auth).
-func (c *Client) getAuthToken(ctx context.Context, registry, image string, auth *config.RegistryAuth) (string, error) {
+func (c *Client) getAuthToken(ctx context.Context, registry, image string, auth *RegistryAuth) (string, error) {
 	if registry != dockerHubRegistry {
 		// For non-Docker Hub registries, return empty token to use basic auth
 		// Basic auth will be applied in fetchManifestDigest if credentials are provided
@@ -157,7 +160,7 @@ func (c *Client) getAuthToken(ctx context.Context, registry, image string, auth 
 	return c.getDockerHubToken(ctx, image, auth)
 }
 
-func (c *Client) getDockerHubToken(ctx context.Context, image string, auth *config.RegistryAuth) (string, error) {
+func (c *Client) getDockerHubToken(ctx context.Context, image string, auth *RegistryAuth) (string, error) {
 	authURL := fmt.Sprintf("https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull", image)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, authURL, nil)

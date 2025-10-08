@@ -14,6 +14,11 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+// Config represents Kubernetes client configuration.
+type Config struct {
+	Kubeconfig string `json:"kubeconfig" koanf:"kubeconfig"`
+}
+
 var (
 	ErrImagePullPolicyNotAlways = errors.New("container does not have imagePullPolicy set to Always")
 	ErrContainerNotFound        = errors.New("container not found in deployment")
@@ -43,6 +48,11 @@ func NewClient(kubeconfig string, logger *slog.Logger) (*Client, error) {
 		clientset: clientset,
 		logger:    logger,
 	}, nil
+}
+
+// Provide creates a new Kubernetes client using fx dependency injection.
+func Provide(cfg Config, logger *slog.Logger) (*Client, error) {
+	return NewClient(cfg.Kubeconfig, logger)
 }
 
 // GetDeployment retrieves a deployment from Kubernetes.

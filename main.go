@@ -2,68 +2,60 @@ package main
 
 import (
 	"context"
-	"errors"
-	"flag"
 	"log/slog"
-	"os"
-	"os/signal"
-	"syscall"
 
 	"github.com/1995parham/deities/internal/config"
 	"github.com/1995parham/deities/internal/controller"
 	"github.com/1995parham/deities/internal/k8s"
+	"github.com/1995parham/deities/internal/logger"
+	"github.com/1995parham/deities/internal/registry"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxevent"
 )
 
 func main() {
-	configPath := flag.String("config", "config.toml", "Path to configuration file")
-	flag.Parse()
+	fx.New(
+		fx.Provide(config.Provide),
+		fx.Provide(logger.Provide),
+		fx.Provide(registry.Provide),
+		fx.Provide(k8s.Provide),
+		fx.Provide(controller.Provide),
+		fx.WithLogger(func(logger *slog.Logger) fxevent.Logger {
+			return &fxevent.SlogLogger{Logger: logger}
+		}),
+		fx.Invoke(run),
+	).Run()
+}
 
-	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
-
-	// Load configuration
-	cfg, err := config.Load(*configPath)
-	if err != nil {
-		logger.Error("Failed to load configuration", slog.String("error", err.Error()))
-
-		os.Exit(1)
-	}
-
+func run(
+	lc fx.Lifecycle,
+	ctrl *controller.Controller,
+	cfg controller.Config,
+	logger *slog.Logger,
+) {
 	logger.Info("Loaded configuration",
 		slog.Int("repositories", len(cfg.Repositories)),
 		slog.Int("deployments", len(cfg.Deployments)),
 	)
 
-	k8sClient, err := k8s.NewClient(cfg.Kubeconfig, logger)
-	if err != nil {
-		logger.Error("Failed to create Kubernetes client", slog.String("error", err.Error()))
+	lc.Append(
+		fx.Hook{
+			OnStart: func(ctx context.Context) error {
+				logger.Info("Starting Deities application")
 
-		os.Exit(1)
-	}
+				go func() {
+					if err := ctrl.Start(ctx); err != nil {
+						logger.Error("Controller error", slog.String("error", err.Error()))
+					}
+				}()
 
-	ctrl := controller.NewController(cfg, k8sClient, logger)
+				return nil
+			},
+			OnStop: func(ctx context.Context) error {
+				logger.Info("Deities stopped gracefully")
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	// Handle shutdown gracefully
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-	go func() {
-		<-sigChan
-		logger.Info("Received shutdown signal")
-		cancel()
-	}()
-
-	// Start controller
-	err = ctrl.Start(ctx)
-
-	// Ensure cleanup happens
-	cancel()
-
-	if err != nil && !errors.Is(err, context.Canceled) {
-		logger.Error("Controller error", slog.String("error", err.Error()))
-		os.Exit(1)
-	}
-
-	logger.Info("Deities stopped gracefully")
+				return nil
+			},
+		},
+	)
 }

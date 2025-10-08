@@ -1,63 +1,76 @@
 package config
 
 import (
-	"fmt"
-	"time"
+	"encoding/json"
+	"log"
+	"strings"
 
+	"github.com/1995parham/deities/internal/controller"
+	"github.com/1995parham/deities/internal/k8s"
+	"github.com/1995parham/deities/internal/logger"
 	"github.com/knadh/koanf/parsers/toml/v2"
+	"github.com/knadh/koanf/providers/env"
 	"github.com/knadh/koanf/providers/file"
 	"github.com/knadh/koanf/providers/structs"
 	"github.com/knadh/koanf/v2"
+	"github.com/tidwall/pretty"
+	"go.uber.org/fx"
 )
 
-// Config represents the application configuration.
+const prefix = "deities_"
+
+// Config represents all application configurations.
 type Config struct {
-	CheckInterval time.Duration `koanf:"check_interval"`
-	Repositories  []Repository  `koanf:"repositories"`
-	Deployments   []Deployment  `koanf:"deployments"`
-	Kubeconfig    string        `koanf:"kubeconfig"`
+	fx.Out
+
+	Controller controller.Config `json:"controller" koanf:"controller"`
+	K8s        k8s.Config        `json:"k8s"        koanf:"k8s"`
+	Logger     logger.Config     `json:"logger"     koanf:"logger"`
 }
 
-// Repository represents a Docker registry repository to monitor.
-type Repository struct {
-	Name     string        `koanf:"name"`
-	Registry string        `koanf:"registry"`
-	Image    string        `koanf:"image"`
-	Tag      string        `koanf:"tag"`
-	Auth     *RegistryAuth `koanf:"auth,omitempty"`
-}
-
-// RegistryAuth contains authentication details for private registries.
-type RegistryAuth struct {
-	Username string `koanf:"username"`
-	Password string `koanf:"password"`
-}
-
-// Deployment represents a Kubernetes deployment to manage.
-type Deployment struct {
-	Name      string `koanf:"name"`
-	Namespace string `koanf:"namespace"`
-	Container string `koanf:"container"`
-	Image     string `koanf:"image"`
-}
-
-// Load reads and parses the configuration file.
-func Load(path string) (*Config, error) {
+// Provide loads and provides the configuration.
+func Provide() Config {
 	k := koanf.New(".")
 
+	// Load default configuration
 	if err := k.Load(structs.Provider(Default(), "koanf"), nil); err != nil {
-		return nil, fmt.Errorf("error loading default: %w", err)
+		log.Fatalf("error loading default: %s", err)
 	}
 
-	if err := k.Load(file.Provider(path), toml.Parser()); err != nil {
-		return nil, fmt.Errorf("failed to load config file: %w", err)
+	// Load configuration from file
+	if err := k.Load(file.Provider("config.toml"), toml.Parser()); err != nil {
+		log.Printf("error loading config.toml: %s", err)
 	}
 
-	var cfg Config
+	// Load environment variables
+	if err := k.Load(
+		env.Provider(prefix, ".", func(source string) string {
+			base := strings.ToLower(strings.TrimPrefix(source, prefix))
 
-	if err := k.Unmarshal("", &cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+			return strings.ReplaceAll(base, "__", ".")
+		}),
+		nil,
+	); err != nil {
+		log.Printf("error loading environment variables: %s", err)
 	}
 
-	return &cfg, nil
+	var instance Config
+	if err := k.Unmarshal("", &instance); err != nil {
+		log.Fatalf("error unmarshalling config: %s", err)
+	}
+
+	indent, err := json.MarshalIndent(instance, "", "\t")
+	if err != nil {
+		log.Fatalf("error marshalling config: %s", err)
+	}
+
+	indent = pretty.Color(indent, nil)
+
+	log.Printf(`
+================ Loaded Configuration ================
+%s
+======================================================
+	`, string(indent))
+
+	return instance
 }

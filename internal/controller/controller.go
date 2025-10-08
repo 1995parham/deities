@@ -8,14 +8,21 @@ import (
 	"sync"
 	"time"
 
-	"github.com/1995parham/deities/internal/config"
 	"github.com/1995parham/deities/internal/k8s"
 	"github.com/1995parham/deities/internal/registry"
 )
 
+// Deployment represents a Kubernetes deployment to manage.
+type Deployment struct {
+	Name      string `json:"name"      koanf:"name"`
+	Namespace string `json:"namespace" koanf:"namespace"`
+	Container string `json:"container" koanf:"container"`
+	Image     string `json:"image"     koanf:"image"`
+}
+
 // Controller manages the image update monitoring and deployment rollouts.
 type Controller struct {
-	config         *config.Config
+	config         Config
 	registryClient *registry.Client
 	k8sClient      *k8s.Client
 	imageDigests   map[string]string // tracks current digests for each repository
@@ -24,15 +31,25 @@ type Controller struct {
 }
 
 // NewController creates a new controller instance.
-func NewController(cfg *config.Config, k8sClient *k8s.Client, logger *slog.Logger) *Controller {
+func NewController(
+	cfg Config,
+	registryClient *registry.Client,
+	k8sClient *k8s.Client,
+	logger *slog.Logger,
+) *Controller {
 	return &Controller{
 		config:         cfg,
-		registryClient: registry.NewClient(logger),
+		registryClient: registryClient,
 		k8sClient:      k8sClient,
 		imageDigests:   make(map[string]string),
 		mu:             sync.RWMutex{},
 		logger:         logger,
 	}
+}
+
+// Provide creates a new controller instance using fx dependency injection.
+func Provide(cfg Config, registryClient *registry.Client, k8sClient *k8s.Client, logger *slog.Logger) *Controller {
+	return NewController(cfg, registryClient, k8sClient, logger)
 }
 
 // Start begins the monitoring loop.
@@ -74,7 +91,7 @@ func (c *Controller) checkAndUpdate(ctx context.Context) {
 }
 
 // checkRepository checks a single repository for updates.
-func (c *Controller) checkRepository(ctx context.Context, repo *config.Repository) error {
+func (c *Controller) checkRepository(ctx context.Context, repo *registry.Repository) error {
 	repoKey := fmt.Sprintf("%s/%s:%s", repo.Registry, repo.Image, repo.Tag)
 
 	// Get current digest from registry
@@ -129,7 +146,7 @@ func (c *Controller) checkRepository(ctx context.Context, repo *config.Repositor
 
 // checkDeploymentsOnStartup checks and updates deployments on initial startup to match registry.
 // nolint: funlen
-func (c *Controller) checkDeploymentsOnStartup(ctx context.Context, repo *config.Repository, registryDigest string) {
+func (c *Controller) checkDeploymentsOnStartup(ctx context.Context, repo *registry.Repository, registryDigest string) {
 	const dockerHubRegistry = "https://registry-1.docker.io"
 
 	imagePrefix := repo.Image
@@ -214,7 +231,7 @@ func (c *Controller) checkDeploymentsOnStartup(ctx context.Context, repo *config
 }
 
 // updateMatchingDeployments updates all deployments that use the given repository.
-func (c *Controller) updateMatchingDeployments(ctx context.Context, repo *config.Repository, newDigest string) {
+func (c *Controller) updateMatchingDeployments(ctx context.Context, repo *registry.Repository, newDigest string) {
 	const dockerHubRegistry = "https://registry-1.docker.io"
 
 	imagePrefix := repo.Image
