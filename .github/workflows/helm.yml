@@ -43,14 +43,14 @@ jobs:
 
       - name: login to github container registry using helm
         run: |
-          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login ghcr.io/1995parham/deities --username ${{ github.repository_owner }} --password-stdin
+          echo ${{ secrets.GITHUB_TOKEN }} | helm registry login "ghcr.io/$GITHUB_REPOSITORY" --username ${{ github.repository_owner }} --password-stdin
 
-      - name: package deities helm chart
+      - name: package helm chart
         run: |
           version=${{ github.ref_name }}
-          helm package --version "${version##v}" --app-version "${version}" ./charts/deities
+          helm package --version "${version##v}" --app-version "${version}" "./charts/${GITHUB_REPOSITORY#*/}"
 
-      - name: publish deities chart to github container registry
+      - name: publish chart to github container registry
         run: |
           version=${{ github.ref_name }}
-          helm push "deities-${version##v}".tgz oci://ghcr.io/1995parham/deities-chart
+          helm push "${GITHUB_REPOSITORY#*/}-${version##v}".tgz "oci://ghcr.io/$GITHUB_REPOSITORY-chart"
