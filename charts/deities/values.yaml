@@ -89,13 +89,35 @@ config:
     check_interval: "5m"
 
     # Registries configuration (define registry addresses and authentication)
-    # Example:
+    #
+    # You can provide authentication credentials in two ways:
+    #
+    # 1. Direct values (simple, good for development):
+    #    registries:
+    #      - name: "https://registry-1.docker.io"
+    #        auth:
+    #          username: "myuser"
+    #          password: "mypassword"
+    #
+    # 2. From a Kubernetes secret (recommended for production):
+    #    registries:
+    #      - name: "https://gcr.io"
+    #        auth:
+    #          secretRef:
+    #            name: gcr-credentials
+    #            usernameKey: username  # optional, defaults to "username"
+    #            passwordKey: password  # optional, defaults to "password"
+    #
+    # When using secretRef, the chart will automatically inject the credentials
+    # as environment variables and configure the application to use them.
+    #
+    # Example with both methods:
     # registries:
-    #   - name: "https://registry-1.docker.io"  # Docker Hub
+    #   - name: "https://registry-1.docker.io"  # Docker Hub (no auth)
     #   - name: "https://gcr.io"
     #     auth:
-    #       username: "_json_key"
-    #       password: "YOUR_GCR_JSON_KEY"
+    #       secretRef:
+    #         name: gcr-credentials
     #   - name: "https://my-registry.example.com"
     #     auth:
     #       username: "myuser"
