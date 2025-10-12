@@ -48,9 +48,9 @@ jobs:
       - name: package helm chart
         run: |
           version=${{ github.ref_name }}
-          helm package --version "${version##v}" --app-version "${version}" "./charts/${GITHUB_REPOSITORY#*/}"
+          helm package --version "${version##v}" --app-version "${version}" "./charts/deities"
 
       - name: publish chart to github container registry
         run: |
           version=${{ github.ref_name }}
-          helm push "${GITHUB_REPOSITORY#*/}-${version##v}".tgz "oci://ghcr.io/$GITHUB_REPOSITORY-chart"
+          helm push "deities-${version##v}".tgz "oci://ghcr.io/$GITHUB_REPOSITORY-chart"
