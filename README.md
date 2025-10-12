@@ -230,6 +230,147 @@ extraEnv:
         key: gcr-key
 ```
 
+#### Registry Authentication
+
+The Helm chart supports two methods for providing registry authentication credentials:
+
+**Method 1: Direct Values (Simple)**
+
+Provide credentials directly in your `values.yaml`:
+
+```yaml
+config:
+  controller:
+    registries:
+      - name: "https://my-registry.example.com"
+        auth:
+          username: "myuser"
+          password: "mypassword"
+```
+
+**Pros:** Simple and straightforward
+**Cons:** Credentials are stored in plain text in values files
+
+**Method 2: Kubernetes Secrets (Recommended)**
+
+Reference credentials from a Kubernetes secret:
+
+**Step 1: Create a Secret**
+
+```bash
+# Using kubectl
+kubectl create secret generic my-registry-credentials \
+  --from-literal=username="myuser" \
+  --from-literal=password="mypassword"
+
+# Or for GCR with JSON key
+kubectl create secret generic gcr-credentials \
+  --from-literal=username="_json_key" \
+  --from-file=password=./gcr-key.json
+```
+
+**Step 2: Reference in values.yaml**
+
+```yaml
+config:
+  controller:
+    registries:
+      - name: "https://gcr.io"
+        auth:
+          secretRef:
+            name: gcr-credentials
+            # usernameKey: username  # optional, defaults to "username"
+            # passwordKey: password  # optional, defaults to "password"
+```
+
+**Pros:** Secure, credentials not exposed in config files
+**Cons:** Requires additional step to create secrets
+
+**Custom Secret Keys**
+
+If your secret uses different key names:
+
+```yaml
+config:
+  controller:
+    registries:
+      - name: "https://my-registry.example.com"
+        auth:
+          secretRef:
+            name: custom-credentials
+            usernameKey: registry-user
+            passwordKey: registry-pass
+```
+
+**Mixed Approach**
+
+You can use both methods in the same configuration:
+
+```yaml
+config:
+  controller:
+    registries:
+      # Public registry (no auth)
+      - name: "https://registry-1.docker.io"
+
+      # Private registry with direct auth (dev/test)
+      - name: "https://dev-registry.example.com"
+        auth:
+          username: "devuser"
+          password: "devpassword"
+
+      # Production registry with secret
+      - name: "https://gcr.io"
+        auth:
+          secretRef:
+            name: gcr-credentials
+```
+
+**How It Works**
+
+When you use `secretRef`:
+
+1. The chart automatically injects environment variables from the specified secret
+2. The config file uses environment variable placeholders (e.g., `${DEITIES_REGISTRY_0_USERNAME}`)
+3. The application expands these variables at runtime
+4. Credentials are never stored in ConfigMaps
+
+**Complete Example**
+
+See [examples/registry-auth-secret.yaml](charts/deities/examples/registry-auth-secret.yaml) for a complete working example with:
+
+- Secret manifests for different registry types
+- Multiple registry configurations
+- Custom secret key names
+
+**Troubleshooting Registry Authentication**
+
+*Secret not found error*
+
+Make sure the secret exists in the same namespace as the Deities deployment:
+
+```bash
+kubectl get secret <secret-name> -n <namespace>
+```
+
+*Authentication still failing*
+
+Verify the secret contains the correct keys:
+
+```bash
+kubectl get secret <secret-name> -o jsonpath='{.data}' | jq
+```
+
+*Check environment variables*
+
+Verify the environment variables are correctly injected:
+
+```bash
+kubectl describe pod <deities-pod-name>
+```
+
+Look for the `DEITIES_REGISTRY_*` environment variables in the output.
+
 See `charts/deities/values.yaml` for all available configuration options.
 
 ## Important Notes
