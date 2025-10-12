@@ -61,6 +61,7 @@ func (c *Client) GetImageDigest(ctx context.Context, img *Image, reg *Registry) 
 	registryAddr := c.normalizeRegistry(reg.Name)
 	imagePath := c.normalizeImagePath(registryAddr, img.Name)
 
+	reg.Auth.Username = os.ExpandEnv(reg.Auth.Username)
 	reg.Auth.Password = os.ExpandEnv(reg.Auth.Password)
 
 	token, err := c.getAuthToken(ctx, registryAddr, imagePath, reg.Auth)
