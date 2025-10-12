@@ -189,10 +189,10 @@ func (c *Controller) buildImagePrefix(img *registry.Image, reg *registry.Registr
 	return imagePrefix
 }
 
-// syncDeployments ensures all deployments using this image match the registry digest.
-// This function performs bidirectional sync by:
-// 1. Checking if deployment image matches the expected registry digest
-// 2. Updating the deployment if there's a mismatch.
+// syncDeployments ensures all deployments using this image are restarted when the registry digest changes.
+// This function compares the running pod's image digest with the registry digest and triggers
+// a rollout restart if they differ. The deployment spec keeps using the image tag, but
+// imagePullPolicy: Always ensures the latest image is pulled.
 // nolint: funlen
 func (c *Controller) syncDeployments(
 	ctx context.Context,
@@ -201,7 +201,6 @@ func (c *Controller) syncDeployments(
 	registryDigest string,
 ) {
 	imagePrefix := c.buildImagePrefix(img, reg)
-	expectedImageRef := fmt.Sprintf("%s@%s", imagePrefix, registryDigest)
 
 	for _, deployment := range c.config.Deployments {
 		// Check if this deployment uses this image
@@ -209,15 +208,15 @@ func (c *Controller) syncDeployments(
 			continue
 		}
 
-		// Get current image from deployment
-		currentImage, err := c.k8sClient.GetCurrentImageDigest(
+		// Get current running image digest from pod status
+		currentImageID, err := c.k8sClient.GetCurrentImageDigest(
 			ctx,
 			deployment.Namespace,
 			deployment.Name,
 			deployment.Container,
 		)
 		if err != nil {
-			c.logger.Error("Failed to get current image for deployment",
+			c.logger.Error("Failed to get current running image for deployment",
 				slog.String("namespace", deployment.Namespace),
 				slog.String("deployment", deployment.Name),
 				slog.String("error", err.Error()),
@@ -226,25 +225,25 @@ func (c *Controller) syncDeployments(
 			continue
 		}
 
-		// Check if deployment image matches registry digest
-		if currentImage != expectedImageRef {
-			c.logger.Info("Syncing deployment to match registry",
+		// Check if running pod's digest matches registry digest
+		// currentImageID format: docker.io/library/nginx@sha256:abc...
+		// registryDigest format: sha256:abc...
+		if !strings.HasSuffix(currentImageID, registryDigest) {
+			c.logger.Info("Running image digest differs from registry, triggering restart",
 				slog.String("namespace", deployment.Namespace),
 				slog.String("deployment", deployment.Name),
-				slog.String("current", currentImage),
-				slog.String("expected", expectedImageRef),
+				slog.String("current_image_id", currentImageID),
+				slog.String("registry_digest", registryDigest),
 			)
 
-			// Update the deployment to match the registry
-			err := c.k8sClient.UpdateDeploymentImage(
+			// Trigger rollout restart to pull latest image
+			err := c.k8sClient.RolloutRestart(
 				ctx,
 				deployment.Namespace,
 				deployment.Name,
-				deployment.Container,
-				expectedImageRef,
 			)
 			if err != nil {
-				c.logger.Error("Failed to sync deployment",
+				c.logger.Error("Failed to restart deployment",
 					slog.String("namespace", deployment.Namespace),
 					slog.String("deployment", deployment.Name),
 					slog.String("error", err.Error()),
@@ -253,15 +252,15 @@ func (c *Controller) syncDeployments(
 				continue
 			}
 
-			c.logger.Info("Successfully synced deployment",
+			c.logger.Info("Successfully restarted deployment",
 				slog.String("namespace", deployment.Namespace),
 				slog.String("deployment", deployment.Name),
-				slog.String("image", expectedImageRef),
 			)
 		} else {
-			c.logger.Debug("Deployment already in sync",
+			c.logger.Debug("Deployment already running latest digest",
 				slog.String("namespace", deployment.Namespace),
 				slog.String("deployment", deployment.Name),
+				slog.String("digest", registryDigest),
 			)
 		}
 	}

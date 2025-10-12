@@ -65,45 +65,6 @@ func (c *Client) GetDeployment(ctx context.Context, namespace, name string) (*ap
 	return deployment, nil
 }
 
-// UpdateDeploymentImage updates the image of a container in a deployment.
-func (c *Client) UpdateDeploymentImage(ctx context.Context, namespace, name, container, newImage string) error {
-	deployment, err := c.GetDeployment(ctx, namespace, name)
-	if err != nil {
-		return err
-	}
-
-	// Verify imagePullPolicy is Always
-	containerFound := false
-
-	for i, cont := range deployment.Spec.Template.Spec.Containers {
-		if cont.Name == container {
-			containerFound = true
-
-			if cont.ImagePullPolicy != "Always" {
-				return fmt.Errorf("%w: %s", ErrImagePullPolicyNotAlways, container)
-			}
-
-			// Update the image with digest
-			deployment.Spec.Template.Spec.Containers[i].Image = newImage
-
-			break
-		}
-	}
-
-	if !containerFound {
-		return fmt.Errorf("%w: %s in %s/%s", ErrContainerNotFound, container, namespace, name)
-	}
-
-	// Update the deployment
-	//nolint:exhaustruct,lll
-	_, err = c.clientset.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
-	if err != nil {
-		return fmt.Errorf("failed to update deployment: %w", err)
-	}
-
-	return nil
-}
-
 // RolloutRestart triggers a rollout restart of a deployment.
 func (c *Client) RolloutRestart(ctx context.Context, namespace, name string) error {
 	deployment, err := c.GetDeployment(ctx, namespace, name)
@@ -127,18 +88,33 @@ func (c *Client) RolloutRestart(ctx context.Context, namespace, name string) err
 	return nil
 }
 
-// GetCurrentImageDigest extracts the current image and digest from a deployment container.
+// GetCurrentImageDigest extracts the current running image digest from a deployment container.
+// It queries the actual running pods to get the real image digest being used.
 func (c *Client) GetCurrentImageDigest(ctx context.Context, namespace, name, container string) (string, error) {
 	deployment, err := c.GetDeployment(ctx, namespace, name)
 	if err != nil {
 		return "", err
 	}
 
-	for _, cont := range deployment.Spec.Template.Spec.Containers {
-		if cont.Name == container {
-			return cont.Image, nil
+	// Get pods for this deployment
+	labelSelector := metav1.FormatLabelSelector(deployment.Spec.Selector)
+	//nolint:exhaustruct
+	pods, err := c.clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: labelSelector,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to list pods for deployment %s/%s: %w", namespace, name, err)
+	}
+
+	// Find the most recent pod and get its container status
+	for _, pod := range pods.Items {
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			if containerStatus.Name == container {
+				// ImageID contains the full image with digest (e.g., docker.io/library/nginx@sha256:...)
+				return containerStatus.ImageID, nil
+			}
 		}
 	}
 
-	return "", fmt.Errorf("%w: %s in %s/%s", ErrContainerNotFound, container, namespace, name)
+	return "", fmt.Errorf("%w: %s in %s/%s or no running pods found", ErrContainerNotFound, container, namespace, name)
 }
