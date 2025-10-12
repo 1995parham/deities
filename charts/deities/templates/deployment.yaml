@@ -32,9 +32,25 @@ spec:
             {{- toYaml .Values.securityContext | nindent 12 }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
-          {{- with .Values.extraEnv }}
+          {{- if or .Values.extraEnv .Values.config.controller.registries }}
           env:
+            {{- range $idx, $registry := .Values.config.controller.registries }}
+            {{- if and $registry.auth $registry.auth.secretRef }}
+            - name: DEITIES_REGISTRY_{{ $idx }}_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $registry.auth.secretRef.name }}
+                  key: {{ default "username" $registry.auth.secretRef.usernameKey }}
+            - name: DEITIES_REGISTRY_{{ $idx }}_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $registry.auth.secretRef.name }}
+                  key: {{ default "password" $registry.auth.secretRef.passwordKey }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
             {{- toYaml . | nindent 12 }}
+            {{- end }}
           {{- end }}
           volumeMounts:
             - name: config
