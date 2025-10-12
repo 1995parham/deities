@@ -74,3 +74,20 @@ Create the name of the role binding to use
 {{- define "deities.roleBindingName" -}}
 {{- include "deities.fullname" . }}
 {{- end }}
+
+{{/*
+Process config to replace auth secretRef with environment variable placeholders
+*/}}
+{{- define "deities.processedConfig" -}}
+{{- $config := deepCopy .Values.config -}}
+{{- if and $config.controller $config.controller.registries -}}
+  {{- range $idx, $registry := $config.controller.registries -}}
+    {{- if and $registry.auth $registry.auth.secretRef -}}
+      {{- $_ := unset $registry.auth "secretRef" -}}
+      {{- $_ := set $registry.auth "username" (printf "${DEITIES_REGISTRY_%d_USERNAME}" $idx) -}}
+      {{- $_ := set $registry.auth "password" (printf "${DEITIES_REGISTRY_%d_PASSWORD}" $idx) -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+{{- $config | toYaml -}}
+{{- end -}}
