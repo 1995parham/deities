@@ -6,4 +6,4 @@ metadata:
     {{- include "deities.labels" . | nindent 4 }}
 data:
   config.toml: |
-    {{- .Values.config | toToml | nindent 4 }}
+    {{- include "deities.processedConfig" . | fromYaml | toToml | nindent 4 }}
