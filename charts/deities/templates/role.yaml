@@ -20,6 +20,9 @@ metadata:
 rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "update", "patch"]
+    verbs: ["get", "list", "update"]
+  - apiGroups: [""]
+    resources: ["pod"]
+    verbs: ["get", "list"]
 {{- end }}
 {{- end }}
