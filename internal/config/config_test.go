@@ -41,7 +41,8 @@ check_interval = "10m"
 	envVars := map[string]string{
 		"deities_logger__level":              "warn",
 		"deities_controller__check_interval": "15m",
-		// replacing array items is not possible with environment variables.
+		// Setting array items via environment variables is not supported.
+		// Arrays must be defined in config.toml.
 		// "deities_controller__deployments__0__namespace": "test",
 		// "deities_controller__deployments__0__name":      "test",
 	}
