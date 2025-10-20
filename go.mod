@@ -9,7 +9,7 @@ require (
 	github.com/knadh/koanf/providers/structs v1.0.0
 	github.com/knadh/koanf/v2 v2.3.0
 	github.com/pterm/pterm v0.12.81
-	github.com/stretchr/testify v1.10.0
+	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/pretty v1.2.1
 	go.uber.org/fx v1.24.0
 	k8s.io/api v0.34.1
