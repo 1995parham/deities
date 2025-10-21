@@ -216,10 +216,10 @@ func (c *Controller) syncDeployments(
 			deployment.Container,
 		)
 		if err != nil {
-			c.logger.Error("Failed to get current running image for deployment",
+			c.logger.Warn("Skipping deployment check, no ready pods available",
 				slog.String("namespace", deployment.Namespace),
 				slog.String("deployment", deployment.Name),
-				slog.String("error", err.Error()),
+				slog.String("reason", err.Error()),
 			)
 
 			continue

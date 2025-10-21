@@ -9,6 +9,7 @@ import (
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -90,6 +91,8 @@ func (c *Client) RolloutRestart(ctx context.Context, namespace, name string) err
 
 // GetCurrentImageDigest extracts the current running image digest from a deployment container.
 // It queries the actual running pods to get the real image digest being used.
+// It only considers ready pods in Running phase to avoid checking pods during rollouts or termination.
+// Returns an error if no suitable pod is found, allowing the caller to skip this check until the next round.
 func (c *Client) GetCurrentImageDigest(ctx context.Context, namespace, name, container string) (string, error) {
 	deployment, err := c.GetDeployment(ctx, namespace, name)
 	if err != nil {
@@ -106,15 +109,41 @@ func (c *Client) GetCurrentImageDigest(ctx context.Context, namespace, name, con
 		return "", fmt.Errorf("failed to list pods for deployment %s/%s: %w", namespace, name, err)
 	}
 
-	// Find the most recent pod and get its container status
+	// Only consider ready pods that are running and not being terminated
 	for _, pod := range pods.Items {
+		// Skip terminating pods
+		if pod.DeletionTimestamp != nil {
+			continue
+		}
+
+		// Only consider pods in Running phase
+		if pod.Status.Phase != "Running" {
+			continue
+		}
+
+		// Check if pod is ready
+		if !isPodReady(&pod) {
+			continue
+		}
+
 		for _, containerStatus := range pod.Status.ContainerStatuses {
-			if containerStatus.Name == container {
+			if containerStatus.Name == container && containerStatus.Ready {
 				// ImageID contains the full image with digest (e.g., docker.io/library/nginx@sha256:...)
 				return containerStatus.ImageID, nil
 			}
 		}
 	}
 
-	return "", fmt.Errorf("%w: %s in %s/%s or no running pods found", ErrContainerNotFound, container, namespace, name)
+	return "", fmt.Errorf("%w: %s in %s/%s or no ready running pods found", ErrContainerNotFound, container, namespace, name)
+}
+
+// isPodReady checks if a pod is in Ready condition.
+func isPodReady(pod *corev1.Pod) bool {
+	for _, condition := range pod.Status.Conditions {
+		if condition.Type == corev1.PodReady && condition.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+
+	return false
 }
