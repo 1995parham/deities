@@ -22,8 +22,19 @@ type Config struct {
 
 var (
 	ErrImagePullPolicyNotAlways = errors.New("container does not have imagePullPolicy set to Always")
-	ErrContainerNotFound        = errors.New("container not found in deployment")
 )
+
+// ContainerNotFoundError represents an error when a container is not found in a deployment
+// or when no ready running pods are available.
+type ContainerNotFoundError struct {
+	Container string
+	Namespace string
+	Name      string
+}
+
+func (err ContainerNotFoundError) Error() string {
+	return fmt.Sprintf("container %s not found in deployment %s/%s or no ready running pods found", err.Container, err.Namespace, err.Name)
+}
 
 // Client handles Kubernetes operations.
 type Client struct {
@@ -134,7 +145,11 @@ func (c *Client) GetCurrentImageDigest(ctx context.Context, namespace, name, con
 		}
 	}
 
-	return "", fmt.Errorf("%w: %s in %s/%s or no ready running pods found", ErrContainerNotFound, container, namespace, name)
+	return "", ContainerNotFoundError{
+		Container: container,
+		Namespace: namespace,
+		Name:      name,
+	}
 }
 
 // isPodReady checks if a pod is in Ready condition.
