@@ -22,7 +22,7 @@ rules:
     resources: ["deployments"]
     verbs: ["get", "list", "update"]
   - apiGroups: [""]
-    resources: ["pod"]
+    resources: ["pods"]
     verbs: ["get", "list"]
 {{- end }}
 {{- end }}
