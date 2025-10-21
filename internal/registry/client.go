@@ -3,7 +3,6 @@ package registry
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -12,10 +11,31 @@ import (
 	"strings"
 )
 
-var (
-	ErrRegistryRequestFailed = errors.New("registry request failed")
-	ErrAuthRequestFailed     = errors.New("auth request failed")
-)
+// RegistryRequestFailedError represents an error when a registry manifest request fails.
+type RegistryRequestFailedError struct {
+	Registry   string
+	Image      string
+	Tag        string
+	StatusCode int
+	Body       string
+}
+
+func (err RegistryRequestFailedError) Error() string {
+	return fmt.Sprintf("registry request failed for %s/%s:%s (status %d): %s",
+		err.Registry, err.Image, err.Tag, err.StatusCode, err.Body)
+}
+
+// AuthRequestFailedError represents an error when authentication to a registry fails.
+type AuthRequestFailedError struct {
+	Registry   string
+	Image      string
+	StatusCode int
+}
+
+func (err AuthRequestFailedError) Error() string {
+	return fmt.Sprintf("auth request failed for %s (image: %s, status %d)",
+		err.Registry, err.Image, err.StatusCode)
+}
 
 // Client handles Docker registry operations.
 type Client struct {
@@ -125,7 +145,13 @@ func (c *Client) fetchManifestDigest(
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 
-		return "", fmt.Errorf("%w: status %d: %s", ErrRegistryRequestFailed, resp.StatusCode, string(body))
+		return "", RegistryRequestFailedError{
+			Registry:   registry,
+			Image:      imagePath,
+			Tag:        tag,
+			StatusCode: resp.StatusCode,
+			Body:       string(body),
+		}
 	}
 
 	return c.extractDigest(resp)
@@ -179,7 +205,11 @@ func (c *Client) getDockerHubToken(ctx context.Context, image string, auth *Regi
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%w: status %d", ErrAuthRequestFailed, resp.StatusCode)
+		return "", AuthRequestFailedError{
+			Registry:   dockerHubRegistry,
+			Image:      image,
+			StatusCode: resp.StatusCode,
+		}
 	}
 
 	var tokenResp struct {

@@ -20,9 +20,7 @@ type Config struct {
 	Kubeconfig string `json:"kubeconfig" koanf:"kubeconfig"`
 }
 
-var (
-	ErrImagePullPolicyNotAlways = errors.New("container does not have imagePullPolicy set to Always")
-)
+var ErrImagePullPolicyNotAlways = errors.New("container does not have imagePullPolicy set to Always")
 
 // ContainerNotFoundError represents an error when a container is not found in a deployment
 // or when no ready running pods are available.
@@ -33,7 +31,12 @@ type ContainerNotFoundError struct {
 }
 
 func (err ContainerNotFoundError) Error() string {
-	return fmt.Sprintf("container %s not found in deployment %s/%s or no ready running pods found", err.Container, err.Namespace, err.Name)
+	return fmt.Sprintf(
+		"container %s not found in deployment %s/%s or no ready running pods found",
+		err.Container,
+		err.Namespace,
+		err.Name,
+	)
 }
 
 // Client handles Kubernetes operations.
