@@ -15,7 +15,6 @@ import (
 )
 
 func main() {
-	// Print colorful logo
 	logo.Print()
 
 	fx.New(
@@ -33,26 +32,32 @@ func main() {
 
 func run(
 	lc fx.Lifecycle,
+	shutdowner fx.Shutdowner,
 	ctrl *controller.Controller,
-	cfg controller.Config,
 	logger *slog.Logger,
 ) {
+	ctx, cancel := context.WithCancel(context.Background())
+
 	lc.Append(
 		fx.Hook{
-			OnStart: func(ctx context.Context) error {
+			OnStart: func(context.Context) error {
 				logger.Info("Starting Deities application")
 
-				go func(ctx context.Context) {
+				go func() {
 					if err := ctrl.Start(ctx); err != nil {
 						logger.Error("Controller error", slog.String("error", err.Error()))
+
+						if shutdownErr := shutdowner.Shutdown(); shutdownErr != nil {
+							logger.Error("Failed to shutdown", slog.String("error", shutdownErr.Error()))
+						}
 					}
-				}(context.WithoutCancel(ctx))
+				}()
 
 				return nil
 			},
-			OnStop: func(ctx context.Context) error {
+			OnStop: func(context.Context) error {
 				logger.Info("Deities stopped gracefully")
-
+				cancel()
 				return nil
 			},
 		},

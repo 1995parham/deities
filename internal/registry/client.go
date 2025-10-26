@@ -7,11 +7,13 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
+	"regexp"
 	"strings"
+	"time"
 )
 
-// RegistryRequestFailedError represents an error when a registry manifest request fails.
 type RegistryRequestFailedError struct {
 	Registry   string
 	Image      string
@@ -25,73 +27,64 @@ func (err RegistryRequestFailedError) Error() string {
 		err.Registry, err.Image, err.Tag, err.StatusCode, err.Body)
 }
 
-// AuthRequestFailedError represents an error when authentication to a registry fails.
 type AuthRequestFailedError struct {
-	Registry   string
-	Image      string
+	Realm      string
 	StatusCode int
 }
 
 func (err AuthRequestFailedError) Error() string {
-	return fmt.Sprintf("auth request failed for %s (image: %s, status %d)",
-		err.Registry, err.Image, err.StatusCode)
+	return fmt.Sprintf("auth request failed for %s (status %d)", err.Realm, err.StatusCode)
 }
 
-// Client handles Docker registry operations.
 type Client struct {
 	httpClient *http.Client
 	logger     *slog.Logger
 }
 
-// NewClient creates a new registry client.
 func NewClient(logger *slog.Logger) *Client {
 	return &Client{
-		httpClient: &http.Client{}, //nolint:exhaustruct
-		logger:     logger,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        10,
+				IdleConnTimeout:     90 * time.Second,
+				TLSHandshakeTimeout: 10 * time.Second,
+			},
+		},
+		logger: logger,
 	}
 }
 
-// Provide creates a new registry client using fx dependency injection.
 func Provide(logger *slog.Logger) *Client {
 	return NewClient(logger)
 }
 
-// ManifestResponse represents the registry manifest response.
-type ManifestResponse struct {
-	SchemaVersion int             `json:"schemaVersion"`
-	MediaType     string          `json:"mediaType"`
-	Config        ManifestConfig  `json:"config"`
-	Layers        []ManifestLayer `json:"layers"`
+type manifestResponse struct {
+	Config struct {
+		Digest string `json:"digest"`
+	} `json:"config"`
 }
 
-type ManifestConfig struct {
-	MediaType string `json:"mediaType"`
-	Size      int64  `json:"size"`
-	Digest    string `json:"digest"`
+type authChallenge struct {
+	Realm   string
+	Service string
+	Scope   string
 }
 
-type ManifestLayer struct {
-	MediaType string `json:"mediaType"`
-	Size      int64  `json:"size"`
-	Digest    string `json:"digest"`
-}
-
-// GetImageDigest retrieves the digest of an image from the registry.
 func (c *Client) GetImageDigest(ctx context.Context, img *Image, reg *Registry) (string, error) {
 	registryAddr := c.normalizeRegistry(reg.Name)
 	imagePath := c.normalizeImagePath(registryAddr, img.Name)
 
-	reg.Auth.Username = os.ExpandEnv(reg.Auth.Username)
-	reg.Auth.Password = os.ExpandEnv(reg.Auth.Password)
-
-	token, err := c.getAuthToken(ctx, registryAddr, imagePath, reg.Auth)
-	if err != nil {
-		return "", fmt.Errorf("failed to get auth token: %w", err)
+	if reg.Auth != nil {
+		reg.Auth.Username = os.ExpandEnv(reg.Auth.Username)
+		reg.Auth.Password = os.ExpandEnv(reg.Auth.Password)
 	}
 
-	digest, err := c.fetchManifestDigest(ctx, registryAddr, imagePath, img.Tag, token, reg.Auth)
+	manifestURL := fmt.Sprintf("%s/v2/%s/manifests/%s", registryAddr, imagePath, img.Tag)
+
+	digest, err := c.fetchManifest(ctx, manifestURL, imagePath, reg.Auth)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to fetch manifest for %s:%s: %w", img.Name, img.Tag, err)
 	}
 
 	return digest, nil
@@ -101,7 +94,6 @@ func (c *Client) normalizeRegistry(registry string) string {
 	if registry == "" {
 		return dockerHubRegistry
 	}
-
 	return registry
 }
 
@@ -109,17 +101,10 @@ func (c *Client) normalizeImagePath(registry, image string) string {
 	if registry == dockerHubRegistry && !strings.Contains(image, "/") {
 		return "library/" + image
 	}
-
 	return image
 }
 
-func (c *Client) fetchManifestDigest(
-	ctx context.Context,
-	registry, imagePath, tag, token string,
-	auth *RegistryAuth,
-) (string, error) {
-	manifestURL := fmt.Sprintf("%s/v2/%s/manifests/%s", registry, imagePath, tag)
-
+func (c *Client) fetchManifest(ctx context.Context, manifestURL, imagePath string, auth *RegistryAuth) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("failed to create request: %w", err)
@@ -127,11 +112,7 @@ func (c *Client) fetchManifestDigest(
 
 	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json")
 
-	// Use bearer token if available (Docker Hub and OAuth2-based registries)
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	} else if auth != nil && auth.Username != "" {
-		// Fall back to basic auth for registries that support it
+	if auth != nil && auth.Username != "" {
 		req.SetBasicAuth(auth.Username, auth.Password)
 	}
 
@@ -139,33 +120,60 @@ func (c *Client) fetchManifestDigest(
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch manifest: %w", err)
 	}
+	defer func() { _ = resp.Body.Close() }()
 
+	if resp.StatusCode == http.StatusUnauthorized {
+		challenge, err := c.parseAuthChallenge(resp.Header.Get("WWW-Authenticate"))
+		if err != nil {
+			return "", fmt.Errorf("failed to parse auth challenge: %w", err)
+		}
+
+		token, err := c.fetchToken(ctx, challenge, imagePath, auth)
+		if err != nil {
+			return "", fmt.Errorf("failed to fetch token: %w", err)
+		}
+
+		return c.fetchManifestWithToken(ctx, manifestURL, token)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return c.extractDigest(resp)
+}
+
+func (c *Client) fetchManifestWithToken(ctx context.Context, manifestURL, token string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, manifestURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Accept", "application/vnd.docker.distribution.manifest.v2+json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch manifest: %w", err)
+	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-
-		return "", RegistryRequestFailedError{
-			Registry:   registry,
-			Image:      imagePath,
-			Tag:        tag,
-			StatusCode: resp.StatusCode,
-			Body:       string(body),
-		}
+		return "", fmt.Errorf("unexpected status %d: %s", resp.StatusCode, string(body))
 	}
 
 	return c.extractDigest(resp)
 }
 
 func (c *Client) extractDigest(resp *http.Response) (string, error) {
-	// Get digest from Docker-Content-Digest header
 	digest := resp.Header.Get("Docker-Content-Digest")
 	if digest != "" {
 		return digest, nil
 	}
 
-	// Fallback: parse the manifest and get config digest
-	var manifest ManifestResponse
+	var manifest manifestResponse
 	if err := json.NewDecoder(resp.Body).Decode(&manifest); err != nil {
 		return "", fmt.Errorf("failed to decode manifest: %w", err)
 	}
@@ -173,22 +181,55 @@ func (c *Client) extractDigest(resp *http.Response) (string, error) {
 	return manifest.Config.Digest, nil
 }
 
-// getAuthToken retrieves an authentication token for the registry.
-// Returns a bearer token for Docker Hub (OAuth2), empty string for other registries (will use basic auth).
-func (c *Client) getAuthToken(ctx context.Context, registry, image string, auth *RegistryAuth) (string, error) {
-	if registry != dockerHubRegistry {
-		// For non-Docker Hub registries, return empty token to use basic auth
-		// Basic auth will be applied in fetchManifestDigest if credentials are provided
-		return "", nil
+func (c *Client) parseAuthChallenge(header string) (*authChallenge, error) {
+	if !strings.HasPrefix(header, "Bearer ") {
+		return nil, fmt.Errorf("unsupported auth type: %s", header)
 	}
 
-	return c.getDockerHubToken(ctx, image, auth)
+	challenge := &authChallenge{}
+	re := regexp.MustCompile(`(\w+)="([^"]+)"`)
+	matches := re.FindAllStringSubmatch(header, -1)
+
+	for _, match := range matches {
+		if len(match) != 3 {
+			continue
+		}
+		key, value := match[1], match[2]
+		switch key {
+		case "realm":
+			challenge.Realm = value
+		case "service":
+			challenge.Service = value
+		case "scope":
+			challenge.Scope = value
+		}
+	}
+
+	if challenge.Realm == "" {
+		return nil, fmt.Errorf("missing realm in auth challenge")
+	}
+
+	return challenge, nil
 }
 
-func (c *Client) getDockerHubToken(ctx context.Context, image string, auth *RegistryAuth) (string, error) {
-	authURL := fmt.Sprintf("https://auth.docker.io/token?service=registry.docker.io&scope=repository:%s:pull", image)
+func (c *Client) fetchToken(ctx context.Context, challenge *authChallenge, imagePath string, auth *RegistryAuth) (string, error) {
+	tokenURL, err := url.Parse(challenge.Realm)
+	if err != nil {
+		return "", fmt.Errorf("invalid realm URL: %w", err)
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, authURL, nil)
+	params := tokenURL.Query()
+	if challenge.Service != "" {
+		params.Set("service", challenge.Service)
+	}
+	if challenge.Scope != "" {
+		params.Set("scope", challenge.Scope)
+	} else {
+		params.Set("scope", fmt.Sprintf("repository:%s:pull", imagePath))
+	}
+	tokenURL.RawQuery = params.Encode()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL.String(), nil)
 	if err != nil {
 		return "", err
 	}
@@ -201,24 +242,30 @@ func (c *Client) getDockerHubToken(ctx context.Context, image string, auth *Regi
 	if err != nil {
 		return "", err
 	}
-
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return "", AuthRequestFailedError{
-			Registry:   dockerHubRegistry,
-			Image:      image,
+			Realm:      challenge.Realm,
 			StatusCode: resp.StatusCode,
 		}
 	}
 
 	var tokenResp struct {
-		Token string `json:"token"`
+		Token       string `json:"token"`
+		AccessToken string `json:"access_token"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to decode token response: %w", err)
 	}
 
-	return tokenResp.Token, nil
+	if tokenResp.Token != "" {
+		return tokenResp.Token, nil
+	}
+	if tokenResp.AccessToken != "" {
+		return tokenResp.AccessToken, nil
+	}
+
+	return "", fmt.Errorf("no token in response")
 }
