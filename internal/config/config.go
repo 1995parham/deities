@@ -20,7 +20,6 @@ import (
 
 const prefix = "deities_"
 
-// Config represents all application configurations.
 type Config struct {
 	fx.Out
 
@@ -29,34 +28,26 @@ type Config struct {
 	Logger     logger.Config     `json:"logger"     koanf:"logger"`
 }
 
-// Provide loads and provides the configuration.
 func Provide() Config {
 	k := koanf.New(".")
 
-	// Load default configuration
 	if err := k.Load(structs.Provider(Default(), "koanf"), nil); err != nil {
 		log.Fatalf("error loading default: %s", err)
 	}
 
-	// Load configuration from file
 	if err := k.Load(file.Provider("config.toml"), toml.Parser()); err != nil {
 		log.Printf("error loading config.toml: %s", err)
 	}
 
-	// load environment variables
 	if err := k.Load(
-		// replace __ with . in environment variables so you can reference field a in struct b
-		// as a__b.
 		env.Provider(".", env.Opt{
 			Prefix: prefix,
 			TransformFunc: func(source string, value string) (string, any) {
 				base := strings.ToLower(strings.TrimPrefix(source, prefix))
-
 				return strings.ReplaceAll(base, "__", "."), value
 			},
 			EnvironFunc: os.Environ,
-		},
-		),
+		}),
 		nil,
 	); err != nil {
 		log.Printf("error loading environment variables: %s", err)
