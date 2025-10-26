@@ -54,7 +54,7 @@ spec:
           {{- end }}
           volumeMounts:
             - name: config
-              mountPath: "/root/config.toml"
+              mountPath: "/app/config.toml"
               subPath: "config.toml"
               readOnly: true
             {{- with .Values.extraVolumeMounts }}
