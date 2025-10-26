@@ -1,5 +1,5 @@
 package registry
 
 const (
-	dockerHubRegistry = "https://registry-1.docker.io"
+	dockerHubHost = "index.docker.io"
 )

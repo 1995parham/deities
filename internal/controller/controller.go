@@ -157,13 +157,12 @@ func (c *Controller) checkImage(ctx context.Context, img *registry.Image) error 
 }
 
 func (c *Controller) buildImagePrefix(img *registry.Image, reg *registry.Registry) string {
-	const dockerHubRegistry = "https://registry-1.docker.io"
-
 	imagePrefix := img.Name
 
-	if reg.Name != "" && reg.Name != dockerHubRegistry {
-		registryHost := strings.TrimPrefix(reg.Name, "https://")
-		registryHost = strings.TrimPrefix(registryHost, "http://")
+	registryHost := strings.TrimPrefix(reg.Name, "https://")
+	registryHost = strings.TrimPrefix(registryHost, "http://")
+
+	if registryHost != "" && registryHost != "registry-1.docker.io" && registryHost != "index.docker.io" {
 		imagePrefix = registryHost + "/" + img.Name
 	}
 
