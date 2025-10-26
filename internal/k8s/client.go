@@ -66,10 +66,15 @@ func Provide(cfg Config, logger *slog.Logger) (*Client, error) {
 }
 
 func (c *Client) GetDeployment(ctx context.Context, namespace, name string) (*appsv1.Deployment, error) {
-	deployment, err := c.clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	deployment, err := c.clientset.AppsV1().Deployments(namespace).Get(
+		ctx,
+		name,
+		metav1.GetOptions{}, // nolint: exhaustruct
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get deployment %s/%s: %w", namespace, name, err)
 	}
+
 	return deployment, nil
 }
 
@@ -85,8 +90,11 @@ func (c *Client) RolloutRestart(ctx context.Context, namespace, name string) err
 
 	deployment.Spec.Template.Annotations["kubectl.kubernetes.io/restartedAt"] = time.Now().Format(time.RFC3339)
 
-	_, err = c.clientset.AppsV1().Deployments(namespace).Update(ctx, deployment, metav1.UpdateOptions{})
-	if err != nil {
+	if _, err := c.clientset.AppsV1().Deployments(namespace).Update(
+		ctx,
+		deployment,
+		metav1.UpdateOptions{}, // nolint: exhaustruct
+	); err != nil {
 		return fmt.Errorf("failed to restart deployment: %w", err)
 	}
 
@@ -100,9 +108,13 @@ func (c *Client) GetCurrentImageDigest(ctx context.Context, namespace, name, con
 	}
 
 	labelSelector := metav1.FormatLabelSelector(deployment.Spec.Selector)
-	pods, err := c.clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: labelSelector,
-	})
+
+	pods, err := c.clientset.CoreV1().Pods(namespace).List(
+		ctx,
+		metav1.ListOptions{ // nolint: exhaustruct
+			LabelSelector: labelSelector,
+		},
+	)
 	if err != nil {
 		return "", fmt.Errorf("failed to list pods for deployment %s/%s: %w", namespace, name, err)
 	}
@@ -132,5 +144,6 @@ func isPodReady(pod *corev1.Pod) bool {
 			return true
 		}
 	}
+
 	return false
 }

@@ -58,6 +58,7 @@ func run(
 			OnStop: func(context.Context) error {
 				logger.Info("Deities stopped gracefully")
 				cancel()
+
 				return nil
 			},
 		},

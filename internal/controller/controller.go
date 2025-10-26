@@ -89,8 +89,10 @@ func (c *Controller) checkAndUpdate(ctx context.Context) {
 	var wg sync.WaitGroup
 	for i := range c.config.Images {
 		wg.Add(1)
+
 		go func(img *registry.Image) {
 			defer wg.Done()
+
 			if err := c.checkImage(ctx, img); err != nil {
 				c.logger.Error("Error checking image",
 					slog.String("image", img.Name),
@@ -100,6 +102,7 @@ func (c *Controller) checkAndUpdate(ctx context.Context) {
 			}
 		}(&c.config.Images[i])
 	}
+
 	wg.Wait()
 }
 
@@ -199,6 +202,7 @@ func (c *Controller) syncDeployment(ctx context.Context, deployment *Deployment,
 			slog.String("deployment", deployment.Name),
 			slog.String("reason", err.Error()),
 		)
+
 		return
 	}
 
@@ -208,6 +212,7 @@ func (c *Controller) syncDeployment(ctx context.Context, deployment *Deployment,
 			slog.String("deployment", deployment.Name),
 			slog.String("digest", registryDigest),
 		)
+
 		return
 	}
 
@@ -224,6 +229,7 @@ func (c *Controller) syncDeployment(ctx context.Context, deployment *Deployment,
 			slog.String("deployment", deployment.Name),
 			slog.String("error", err.Error()),
 		)
+
 		return
 	}
 

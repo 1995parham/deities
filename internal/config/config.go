@@ -44,6 +44,7 @@ func Provide() Config {
 			Prefix: prefix,
 			TransformFunc: func(source string, value string) (string, any) {
 				base := strings.ToLower(strings.TrimPrefix(source, prefix))
+
 				return strings.ReplaceAll(base, "__", "."), value
 			},
 			EnvironFunc: os.Environ,
