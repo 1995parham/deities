@@ -9,7 +9,10 @@ metadata:
 rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
-    verbs: ["get", "list", "update", "patch"]
+    verbs: ["get", "list", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
 {{- else }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
