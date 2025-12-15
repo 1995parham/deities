@@ -28,11 +28,6 @@ clean:
 test:
     go test -v ./...
 
-# Install dependencies
-deps:
-    go mod download
-    go mod tidy
-
 # Build Docker image
 docker-build:
     docker build -t {{ IMAGE_NAME }}:{{ IMAGE_TAG }} .
@@ -49,9 +44,9 @@ install:
 lint:
     golangci-lint run
 
-# Run go mod tidy
-tidy:
-    go mod tidy
+# Update packages
+update:
+    go get -u
 
 # Build for multiple platforms
 build-all:
