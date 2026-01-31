@@ -54,3 +54,19 @@ build-all:
     GOOS=darwin GOARCH=amd64 go build -o {{ BINARY }}-darwin-amd64 .
     GOOS=darwin GOARCH=arm64 go build -o {{ BINARY }}-darwin-arm64 .
     GOOS=windows GOARCH=amd64 go build -o {{ BINARY }}-windows-amd64.exe .
+
+# Start E2E test environment
+e2e-up:
+    docker compose -f docker-compose.e2e.yaml up -d --build
+
+# Run E2E tests
+e2e-test: e2e-up
+    ./scripts/e2e-test.sh
+
+# Stop E2E test environment
+e2e-down:
+    docker compose -f docker-compose.e2e.yaml down -v
+
+# View E2E logs
+e2e-logs:
+    docker compose -f docker-compose.e2e.yaml logs -f

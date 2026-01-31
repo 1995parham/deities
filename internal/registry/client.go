@@ -34,7 +34,7 @@ func (c *Client) GetImageDigest(ctx context.Context, img *Image, reg *Registry) 
 
 	auth := c.buildAuthenticator(reg)
 
-	desc, err := remote.Get(ref, remote.WithAuth(auth), remote.WithContext(ctx))
+	desc, err := remote.Head(ref, remote.WithAuth(auth), remote.WithContext(ctx))
 	if err != nil {
 		return "", fmt.Errorf("failed to get image %s: %w", imageRef, err)
 	}
