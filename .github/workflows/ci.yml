@@ -45,19 +45,185 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Start e2e environment
-        run: docker compose -f docker-compose.e2e.yaml up -d --build --wait
+      - name: Create kind cluster with local registry
+        uses: helm/kind-action@v1.13.0
+        with:
+          cluster_name: deities-e2e
+          registry: true
+          registry_name: kind-registry
+          registry_port: 5001
 
-      - name: Run e2e tests
-        run: ./scripts/e2e-test.sh
+      - name: Build deities image
+        run: docker build -t localhost:5001/deities:e2e .
 
-      - name: Show logs on failure
+      - name: Push deities image to local registry
+        run: docker push localhost:5001/deities:e2e
+
+      - name: Create e2e test config
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: deities-config
+            namespace: default
+          data:
+            config.toml: |
+              [logger]
+              level = "debug"
+
+              [controller]
+              check_interval = "10s"
+
+              [[controller.registries]]
+              name = "http://kind-registry:5000"
+
+              [[controller.images]]
+              name = "test-app"
+              registry = "http://kind-registry:5000"
+              tag = "latest"
+
+              [[controller.deployments]]
+              name = "test-app"
+              namespace = "default"
+              container = "app"
+              image = "test-app"
+          EOF
+
+      - name: Build and push initial test image (v1)
+        run: |
+          echo "FROM alpine:3.21" > /tmp/Dockerfile
+          echo "RUN echo 'Version: v1' > /version.txt" >> /tmp/Dockerfile
+          echo 'CMD ["cat", "/version.txt"]' >> /tmp/Dockerfile
+          docker build -t localhost:5001/test-app:latest -f /tmp/Dockerfile /tmp
+          docker push localhost:5001/test-app:latest
+
+      - name: Deploy test application
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: test-app
+            namespace: default
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: test-app
+            template:
+              metadata:
+                labels:
+                  app: test-app
+              spec:
+                containers:
+                - name: app
+                  image: kind-registry:5000/test-app:latest
+                  imagePullPolicy: Always
+          EOF
+          kubectl wait --for=condition=available deployment/test-app --timeout=60s
+
+      - name: Deploy deities
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: ServiceAccount
+          metadata:
+            name: deities
+            namespace: default
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRole
+          metadata:
+            name: deities
+          rules:
+          - apiGroups: ["apps"]
+            resources: ["deployments"]
+            verbs: ["get", "list", "watch", "patch"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: ClusterRoleBinding
+          metadata:
+            name: deities
+          subjects:
+          - kind: ServiceAccount
+            name: deities
+            namespace: default
+          roleRef:
+            kind: ClusterRole
+            name: deities
+            apiGroup: rbac.authorization.k8s.io
+          ---
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: deities
+            namespace: default
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: deities
+            template:
+              metadata:
+                labels:
+                  app: deities
+              spec:
+                serviceAccountName: deities
+                containers:
+                - name: deities
+                  image: kind-registry:5000/deities:e2e
+                  args: ["--config", "/config/config.toml"]
+                  volumeMounts:
+                  - name: config
+                    mountPath: /config
+                volumes:
+                - name: config
+                  configMap:
+                    name: deities-config
+          EOF
+          kubectl wait --for=condition=available deployment/deities --timeout=60s
+
+      - name: Wait for deities to sync initial state
+        run: sleep 30
+
+      - name: Record initial restart annotation
+        id: initial
+        run: |
+          RESTART=$(kubectl get deployment test-app -o jsonpath='{.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}' 2>/dev/null || echo "")
+          echo "restart=$RESTART" >> $GITHUB_OUTPUT
+          echo "Initial restart annotation: ${RESTART:-<none>}"
+
+      - name: Push updated test image (v2)
+        run: |
+          echo "FROM alpine:3.21" > /tmp/Dockerfile
+          echo "RUN echo 'Version: v2' > /version.txt" >> /tmp/Dockerfile
+          echo 'CMD ["cat", "/version.txt"]' >> /tmp/Dockerfile
+          docker build -t localhost:5001/test-app:latest -f /tmp/Dockerfile /tmp
+          docker push localhost:5001/test-app:latest
+
+      - name: Wait for deployment restart
+        run: |
+          INITIAL="${{ steps.initial.outputs.restart }}"
+          for i in $(seq 1 120); do
+            CURRENT=$(kubectl get deployment test-app -o jsonpath='{.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}' 2>/dev/null || echo "")
+            if [[ -n "$CURRENT" && "$CURRENT" != "$INITIAL" ]]; then
+              echo "Deployment restarted at: $CURRENT"
+              echo "E2E test PASSED: Deities detected image update and restarted deployment"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "E2E test FAILED: Deployment was not restarted within 120s"
+          exit 1
+
+      - name: Show deities logs on failure
         if: failure()
-        run: docker compose -f docker-compose.e2e.yaml logs
+        run: kubectl logs -l app=deities --tail=100
 
       - name: Cleanup
         if: always()
-        run: docker compose -f docker-compose.e2e.yaml down -v
+        run: kind delete cluster --name deities-e2e
 
   docker:
     name: docker
