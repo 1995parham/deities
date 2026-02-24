@@ -13,3 +13,8 @@ linters:
     - revive
     - wrapcheck
     - noinlineerr
+  settings:
+    gosec:
+      excludes:
+        # Password field in registry auth config is not a secret literal
+        - G117
