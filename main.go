@@ -37,6 +37,7 @@ func run(
 	logger *slog.Logger,
 ) {
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	lc.Append(
 		fx.Hook{
