@@ -13,9 +13,9 @@ require (
 	github.com/stretchr/testify v1.11.1
 	github.com/tidwall/pretty v1.2.1
 	go.uber.org/fx v1.24.0
-	k8s.io/api v0.35.4
+	k8s.io/api v0.36.0
 	k8s.io/apimachinery v0.36.0
-	k8s.io/client-go v0.35.4
+	k8s.io/client-go v0.36.0
 )
 
 require (
@@ -68,7 +68,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
-	github.com/vbatts/tar-split v0.12.2 // indirect
+	github.com/vbatts/tar-split v0.12.3 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
 	go.uber.org/dig v1.19.0 // indirect
