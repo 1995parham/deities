@@ -27,7 +27,7 @@ Deities is a Go application that monitors Docker registries for image updates an
 
 ## Requirements
 
-- Go 1.25 or later
+- Go 1.27 or later
 - Access to Kubernetes cluster (in-cluster or via kubeconfig)
 - Deployments must have `imagePullPolicy: Always`
 
