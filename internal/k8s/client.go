@@ -69,7 +69,7 @@ func (c *Client) GetDeployment(ctx context.Context, namespace, name string) (*ap
 	deployment, err := c.clientset.AppsV1().Deployments(namespace).Get(
 		ctx,
 		name,
-		metav1.GetOptions{}, // nolint: exhaustruct
+		metav1.GetOptions{}, //nolint:exhaustruct,exhaustruct_v5
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get deployment %s/%s: %w", namespace, name, err)
@@ -93,7 +93,7 @@ func (c *Client) RolloutRestart(ctx context.Context, namespace, name string) err
 	if _, err := c.clientset.AppsV1().Deployments(namespace).Update(
 		ctx,
 		deployment,
-		metav1.UpdateOptions{}, // nolint: exhaustruct
+		metav1.UpdateOptions{}, //nolint:exhaustruct,exhaustruct_v5
 	); err != nil {
 		return fmt.Errorf("failed to restart deployment: %w", err)
 	}
@@ -111,7 +111,7 @@ func (c *Client) GetCurrentImageDigest(ctx context.Context, namespace, name, con
 
 	pods, err := c.clientset.CoreV1().Pods(namespace).List(
 		ctx,
-		metav1.ListOptions{ // nolint: exhaustruct
+		metav1.ListOptions{ //nolint:exhaustruct,exhaustruct_v5
 			LabelSelector: labelSelector,
 		},
 	)
