@@ -249,6 +249,7 @@ config:
 ```
 
 **Pros:** Simple and straightforward
+
 **Cons:** Credentials are stored in plain text in values files
 
 **Method 2: Kubernetes Secrets (Recommended)**
@@ -284,6 +285,7 @@ config:
 ```
 
 **Pros:** Secure, credentials not exposed in config files
+
 **Cons:** Requires additional step to create secrets
 
 **Custom Secret Keys**
@@ -377,9 +379,7 @@ See `charts/deities/values.yaml` for all available configuration options.
 
 ### ImagePullPolicy Requirement
 
-All deployments managed by Deities **must** have `imagePullPolicy: Always`.
-This ensures that when the deployment is updated with a new digest, Kubernetes will pull
-the latest image from the registry.
+All deployments managed by Deities **must** have `imagePullPolicy: Always`. This ensures that when the deployment is updated with a new digest, Kubernetes will pull the latest image from the registry.
 
 ```yaml
 spec:
