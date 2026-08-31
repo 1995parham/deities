@@ -14,7 +14,7 @@ require (
 	github.com/tidwall/pretty v1.2.1
 	go.uber.org/fx v1.24.0
 	k8s.io/api v0.36.4
-	k8s.io/apimachinery v0.36.4
+	k8s.io/apimachinery v0.37.0
 	k8s.io/client-go v0.36.4
 )
 
