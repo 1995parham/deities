@@ -13,6 +13,10 @@ linters:
     - revive
     - wrapcheck
     - noinlineerr
+    # deprecated aliases of exhaustruct_v5 / gomodguard_v2 / wsl_v5, which `all` already enables
+    - exhaustruct
+    - gomodguard
+    - wsl
   settings:
     gosec:
       excludes:

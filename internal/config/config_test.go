@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// nolint: paralleltest
+//nolint:paralleltest
 func TestConfigLoadingOrder(t *testing.T) {
 	// Create a temporary directory for the test config file
 	tempDir := t.TempDir()
