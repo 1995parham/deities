@@ -21,11 +21,13 @@ func (err RegistryNotFoundError) Error() string {
 	return fmt.Sprintf("registry configuration not found for image %s (registry: %s)", err.image, err.registry)
 }
 
+// Deployment identifies a single container of a single Kubernetes deployment
+// that should be restarted when Image gains a new digest.
 type Deployment struct {
-	Name      string `json:"name"      koanf:"name"`
-	Namespace string `json:"namespace" koanf:"namespace"`
-	Container string `json:"container" koanf:"container"`
-	Image     string `json:"image"     koanf:"image"`
+	Name      string `json:"name"      koanf:"name"      validate:"required,k8s_subdomain"`
+	Namespace string `json:"namespace" koanf:"namespace" validate:"required,k8s_label"`
+	Container string `json:"container" koanf:"container" validate:"required,k8s_label"`
+	Image     string `json:"image"     koanf:"image"     validate:"required"`
 }
 
 type Controller struct {

@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -21,18 +22,22 @@ import (
 const prefix = "deities_"
 
 type Config struct {
-	fx.Out
+	fx.Out `validate:"-"`
 
 	Controller controller.Config `json:"controller" koanf:"controller"`
 	K8s        k8s.Config        `json:"k8s"        koanf:"k8s"`
 	Logger     logger.Config     `json:"logger"     koanf:"logger"`
 }
 
-func Provide() Config {
+// Provide loads the configuration from defaults, config.toml and the
+// environment (in that order of precedence) and returns it only once it has
+// passed validation. Returning the error rather than exiting lets fx report a
+// bad configuration as a startup failure, and lets tests assert on it.
+func Provide() (Config, error) {
 	k := koanf.New(".")
 
 	if err := k.Load(structs.Provider(Default(), "koanf"), nil); err != nil {
-		log.Fatalf("error loading default: %s", err)
+		return Config{}, fmt.Errorf("loading defaults: %w", err) //nolint:exhaustruct_v5 // zero value on error.
 	}
 
 	if err := k.Load(file.Provider("config.toml"), toml.Parser()); err != nil {
@@ -56,12 +61,26 @@ func Provide() Config {
 
 	var instance Config
 	if err := k.Unmarshal("", &instance); err != nil {
-		log.Fatalf("error unmarshalling config: %s", err)
+		return Config{}, fmt.Errorf("unmarshalling configuration: %w", err) //nolint:exhaustruct_v5 // zero value on error.
 	}
 
+	dump(instance)
+
+	if err := instance.Validate(); err != nil {
+		return Config{}, err //nolint:exhaustruct_v5 // zero value on error.
+	}
+
+	return instance, nil
+}
+
+// dump writes the effective configuration so that a failed validation can be
+// read against the values that produced it.
+func dump(instance Config) {
 	indent, err := json.MarshalIndent(instance, "", "\t")
 	if err != nil {
-		log.Fatalf("error marshalling config: %s", err)
+		log.Printf("error marshalling config: %s", err)
+
+		return
 	}
 
 	indent = pretty.Color(indent, nil)
@@ -71,6 +90,4 @@ func Provide() Config {
 %s
 ======================================================
 	`, string(indent))
-
-	return instance
 }

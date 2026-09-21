@@ -15,7 +15,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// Config represents Kubernetes client configuration.
+// Config represents Kubernetes client configuration. An empty Kubeconfig
+// means "use the in-cluster config".
 type Config struct {
 	Kubeconfig string `json:"kubeconfig" koanf:"kubeconfig"`
 }

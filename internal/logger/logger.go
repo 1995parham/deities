@@ -6,8 +6,9 @@ import (
 	"github.com/pterm/pterm"
 )
 
+// Config configures the application logger.
 type Config struct {
-	Level string `json:"level" koanf:"level"`
+	Level string `json:"level" koanf:"level" validate:"required,oneof=debug info warn error"`
 }
 
 // Provide creates a slog logger with pterm integration.

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"os"
 
 	"github.com/1995parham/deities/internal/config"
 	"github.com/1995parham/deities/internal/controller"
@@ -10,6 +11,7 @@ import (
 	"github.com/1995parham/deities/internal/logger"
 	"github.com/1995parham/deities/internal/logo"
 	"github.com/1995parham/deities/internal/registry"
+	"github.com/pterm/pterm"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxevent"
 )
@@ -17,8 +19,17 @@ import (
 func main() {
 	logo.Print()
 
+	// Load and validate the configuration before the dependency graph is built,
+	// so that a bad config.toml reports its violations on their own instead of
+	// buried inside an fx constructor trace.
+	cfg, err := config.Provide()
+	if err != nil {
+		pterm.Error.Println(err)
+		os.Exit(1)
+	}
+
 	fx.New(
-		fx.Provide(config.Provide),
+		fx.Provide(func() config.Config { return cfg }),
 		fx.Provide(logger.Provide),
 		fx.Provide(registry.Provide),
 		fx.Provide(k8s.Provide),

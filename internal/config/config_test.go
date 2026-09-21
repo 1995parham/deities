@@ -51,7 +51,8 @@ check_interval = "10m"
 		t.Setenv(key, value)
 	}
 
-	cfg := config.Provide()
+	cfg, err := config.Provide()
+	require.NoError(t, err)
 
 	// Verify environment variables override file values
 	assert.Equal(t, "warn", cfg.Logger.Level)

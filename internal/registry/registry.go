@@ -3,16 +3,21 @@ package registry
 import "fmt"
 
 // Registry represents a Docker registry with its address and authentication.
+// Name is the registry address (e.g., "https://registry-1.docker.io"). Auth is
+// optional, but when it is present both credentials must be set.
 type Registry struct {
-	Name string        `json:"name" koanf:"name"` // Registry address (e.g., "https://registry-1.docker.io")
-	Auth *RegistryAuth `json:"auth" koanf:"auth,omitempty"`
+	Name string        `json:"name" koanf:"name"           validate:"required"`
+	Auth *RegistryAuth `json:"auth" koanf:"auth,omitempty" validate:"omitempty"`
 }
 
-// Image represents a Docker image to monitor.
+// Image represents a Docker image to monitor. Name is the image name (e.g.,
+// "nginx", "myorg/myapp") and Registry references the name of a configured
+// registry; that reference is resolved by the cross-field validation in
+// internal/config.
 type Image struct {
-	Name     string `json:"name"     koanf:"name"`     // Image name (e.g., "nginx", "myorg/myapp")
-	Registry string `json:"registry" koanf:"registry"` // Reference to registry name
-	Tag      string `json:"tag"      koanf:"tag"`      // Image tag (e.g., "latest", "stable")
+	Name     string `json:"name"     koanf:"name"     validate:"required"`
+	Registry string `json:"registry" koanf:"registry" validate:"required"`
+	Tag      string `json:"tag"      koanf:"tag"      validate:"required"`
 }
 
 func (img Image) Key() string {
@@ -25,6 +30,6 @@ func (img Image) String() string {
 
 // RegistryAuth contains authentication details for private registries.
 type RegistryAuth struct {
-	Username string `json:"username" koanf:"username"`
-	Password string `json:"password" koanf:"password"`
+	Username string `json:"username" koanf:"username" validate:"required"`
+	Password string `json:"password" koanf:"password" validate:"required"`
 }
