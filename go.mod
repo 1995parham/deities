@@ -9,7 +9,7 @@ require (
 	github.com/knadh/koanf/providers/env/v2 v2.0.2
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/providers/structs v1.0.1
-	github.com/knadh/koanf/v2 v2.3.7
+	github.com/knadh/koanf/v2 v2.3.8
 	github.com/pterm/pterm v0.12.83
 	github.com/stretchr/testify v1.12.1
 	github.com/tidwall/pretty v1.2.2
